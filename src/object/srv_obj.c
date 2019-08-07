@@ -207,6 +207,10 @@ ds_bulk_transfer(crt_rpc_t *rpc, crt_bulk_op_t bulk_op, bool bulk_bind,
 	crt_bulk_opid_t		bulk_opid;
 	crt_bulk_perm_t		bulk_perm;
 	int			i, rc, *status, ret;
+    uint64_t                time_start = 0;
+    struct obj_tls          *tls = obj_tls_get();
+
+    D_TIME_START(tls->ot_sp, time_start, OBJ_PF_UPDATE_TRANSFER);
 
 	bulk_perm = bulk_op == CRT_BULK_PUT ? CRT_BULK_RO : CRT_BULK_RW;
 	rc = ABT_eventual_create(sizeof(*status), &arg.eventual);
@@ -335,6 +339,7 @@ next:
 		rc = ret ? dss_abterr2der(ret) : *status;
 
 	ABT_eventual_free(&arg.eventual);
+	D_TIME_END(tls->ot_sp, time_start, OBJ_PF_UPDATE_TRANSFER);
 	return rc;
 }
 
@@ -612,7 +617,11 @@ obj_local_rw(crt_rpc_t *rpc, struct ds_cont_hdl *cont_hdl,
 	uint32_t		tag = dss_get_module_info()->dmi_tgt_id;
 	daos_handle_t		ioh = DAOS_HDL_INVAL;
 	uint64_t		time_start = 0;
+	uint64_t		time_start1 = 0;
+	uint64_t		time_start2 = 0;
 	struct obj_tls		*tls = obj_tls_get();
+	struct obj_tls		*tls1 = obj_tls_get();
+	struct obj_tls		*tls2 = obj_tls_get();
 	struct bio_desc		*biod;
 	crt_bulk_op_t		bulk_op;
 	bool			rma;
@@ -682,7 +691,9 @@ obj_local_rw(crt_rpc_t *rpc, struct ds_cont_hdl *cont_hdl,
 	}
 
 	biod = vos_ioh2desc(ioh);
+	D_TIME_START(tls1->ot_sp, time_start1, OBJ_PF_BIO_IOD_PREP);
 	rc = bio_iod_prep(biod);
+	D_TIME_END(tls1->ot_sp, time_start1, OBJ_PF_BIO_IOD_PREP);
 	if (rc) {
 		D_ERROR(DF_UOID" bio_iod_prep failed: %d.\n",
 			DP_UOID(orw->orw_oid), rc);
@@ -703,7 +714,9 @@ obj_local_rw(crt_rpc_t *rpc, struct ds_cont_hdl *cont_hdl,
 			DP_UOID(orw->orw_oid), rc);
 	}
 
+	D_TIME_START(tls2->ot_sp, time_start2, OBJ_PF_BIO_IOD_POST);
 	err = bio_iod_post(biod);
+	D_TIME_END(tls2->ot_sp, time_start2, OBJ_PF_BIO_IOD_POST);
 	rc = rc ? : err;
 out:
 	rc = ds_obj_rw_complete(rpc, cont_hdl, ioh, rc, dth);

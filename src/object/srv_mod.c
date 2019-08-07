@@ -112,6 +112,9 @@ char *profile_op_names[] = {
 	[OBJ_PF_UPDATE_WAIT] = "update_end",
 	[OBJ_PF_UPDATE_REPLY] = "update_repl",
 	[OBJ_PF_UPDATE] = "update",
+	[OBJ_PF_UPDATE_TRANSFER] = "ds_bulk_transfer",
+	[OBJ_PF_BIO_IOD_PREP] = "bio_iod_prep",
+	[OBJ_PF_BIO_IOD_POST] = "bio_iod_post",
 };
 
 static int

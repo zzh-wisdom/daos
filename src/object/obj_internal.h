@@ -151,6 +151,9 @@ enum obj_profile_op {
 	OBJ_PF_UPDATE_WAIT,
 	OBJ_PF_UPDATE_REPLY,
 	OBJ_PF_UPDATE,
+	OBJ_PF_UPDATE_TRANSFER,
+	OBJ_PF_BIO_IOD_PREP,
+	OBJ_PF_BIO_IOD_POST,
 };
 
 struct obj_tls {
