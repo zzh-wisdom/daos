@@ -519,17 +519,8 @@ vos_cont_destroy(daos_handle_t poh, uuid_t co_uuid)
 	if (rc != -DER_NONEXIST) {
 		D_ASSERT(rc == 0);
 
-		if (cont->vc_open_count == 0) {
-			d_uhash_link_delete(vos_cont_hhash_get(),
-					    &cont->vc_uhlink);
-			cont_decref(cont);
-		} else {
-			D_ERROR("Open reference exists for cont "DF_UUID
-				", cannot destroy, open count: %d\n",
-				DP_UUID(co_uuid), cont->vc_open_count);
-			cont_decref(cont);
-			D_GOTO(exit, rc = -DER_BUSY);
-		}
+		d_uhash_link_delete(vos_cont_hhash_get(), &cont->vc_uhlink);
+		cont_decref(cont);
 	}
 
 	rc = cont_df_lookup(vpool, &key, &args);

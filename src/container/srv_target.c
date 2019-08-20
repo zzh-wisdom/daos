@@ -489,10 +489,9 @@ cont_child_destroy_one(void *vin)
 		/* Should evict if idle, but no such interface at the moment. */
 		cont_child_put(tls->dt_cont_cache, cont);
 
-		if (!resyncing) {
-			D_ERROR("container is still in-use\n");
-			D_GOTO(out_pool, rc = -DER_BUSY);
-		} /* else: resync should have completed, try again */
+		if (!resyncing)
+			break;
+		/* else: resync should have completed, try again */
 	}
 
 	D_DEBUG(DF_DSMS, DF_CONT": destroying vos container\n",
