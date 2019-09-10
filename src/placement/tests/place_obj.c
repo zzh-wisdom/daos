@@ -29,7 +29,6 @@
 #include <daos.h>
 
 #define USE_TIME_PROFILING
-#define TIME_PROFILING_GNUPLOT
 #include "benchmark_util.h"
 
 /*
@@ -40,6 +39,10 @@
 #define DEFAULT_NUM_DOMAINS             8
 #define DEFAULT_NODES_PER_DOMAIN        1
 #define DEFAULT_VOS_PER_TARGET          4
+
+#define BENCHMARK_STEPS 100
+#define BENCHMARK_COUNT_PER_STEP 10000
+#define BENCHMARK_COUNT (BENCHMARK_STEPS * BENCHMARK_COUNT_PER_STEP)
 
 static void
 print_usage(const char *prog_name, const char *const ops[], uint32_t num_ops)
@@ -275,9 +278,10 @@ gen_pool_and_placement_map(int num_domains, int nodes_per_domain,
 	rc = pool_map_create(buf, 1, po_map_out);
 	D_ASSERT(rc == 0);
 
-	pool_map_print(*po_map_out);
+	if (g_pl_debug_msg)
+		pool_map_print(*po_map_out);
 
-	mia.ia_type	    = PL_TYPE_RING;
+	mia.ia_type	    = pl_type;
 	mia.ia_ring.ring_nr = 1;
 	mia.ia_ring.domain  = PO_COMP_TP_RACK;
 
@@ -428,10 +432,137 @@ ring_placement_test(int argc, char **argv, uint32_t num_domains,
 	D_PRINT("\nRing placement tests passed!\n");
 }
 
+static void
+benchmark_placement_usage() {
+	printf("Placement benchmark usage: -- --map-type <type>\n"
+	       "\n"
+	       "Required Arguments\n"
+	       "  --map-type <type>\n"
+	       "      Short version: -m\n"
+	       "      The map type to use\n"
+	       "      Possible values:\n"
+	       "          PL_TYPE_RING\n"
+	       "          PL_TYPE_JUMP_MAP\n"
+	       "\n"
+	       "Optional Arguments\n"
+	       "  --vtune-loop\n"
+	       "      Short version: -t\n"
+	       "      If specified, runs a tight loop on placement for analysis with VTune\n");
+}
+
+static void
+benchmark_placement(int argc, char **argv, uint32_t num_domains,
+                    uint32_t nodes_per_domain, uint32_t vos_per_target)
+{
+	struct pool_map *pool_map;
+	struct pl_map *pl_map;
+	struct daos_obj_md *obj_table;
+	int i;
+	struct pl_obj_layout **layout_table;
+
+	pl_map_type_t map_type = PL_TYPE_UNKNOWN;
+	int vtune_loop = 0;
+
+	while (1) {
+		static struct option long_options[] = {
+			{"map-type", required_argument, 0, 'm'},
+			{"vtune-loop", no_argument, 0, 't'},
+			{0, 0, 0, 0}
+		};
+		int c;
+
+		c = getopt_long(argc, argv, "m:t", long_options, NULL);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'm':
+			if (strncmp(optarg, "PL_TYPE_RING", 12) == 0) {
+				map_type = PL_TYPE_RING;
+			} else if (strncmp(optarg, "PL_TYPE_JUMP_MAP", 15)
+			           == 0) {
+				map_type = PL_TYPE_JUMP_MAP;
+			} else {
+				printf("ERROR: Unknown map-type '%s'\n",
+				       optarg);
+				benchmark_placement_usage();
+				return;
+			}
+			break;
+		case 't':
+			vtune_loop = 1;
+			break;
+		case '?':
+		default:
+			printf("ERROR: Unrecognized argument '%s'\n", optarg);
+			benchmark_placement_usage();
+			return;
+		}
+	}
+	if (map_type == PL_TYPE_UNKNOWN) {
+		printf("ERROR: --map-type must be specified!\n");
+		benchmark_placement_usage();
+		return;
+	}
+
+	/* Create reference pool/placement map */
+	gen_pool_and_placement_map(num_domains, nodes_per_domain,
+	                           vos_per_target, map_type,
+	                           &pool_map, &pl_map);
+	D_ASSERT(pool_map != NULL);
+	D_ASSERT(pl_map != NULL);
+
+	/* Generate list of OIDs to look up */
+	D_ALLOC_ARRAY(obj_table, BENCHMARK_COUNT);
+	D_ASSERT(obj_table != NULL);
+
+	/* Storage for returned layout data */
+	D_ALLOC_ARRAY(layout_table, BENCHMARK_COUNT);
+	D_ASSERT(layout_table != NULL);
+
+	for (i = 0; i < BENCHMARK_COUNT; i++) {
+		memset(&obj_table[i], 0, sizeof(obj_table[i]));
+		obj_table[i].omd_id.lo = rand();
+		obj_table[i].omd_id.hi = 5;
+		daos_obj_generate_id(&obj_table[i].omd_id, 0, OC_RP_4G2, 0);
+		obj_table[i].omd_ver = 1;
+	}
+
+	/* Warm up the cache */
+	for (i = 0; i < BENCHMARK_COUNT; i++)
+		pl_obj_place(pl_map, &obj_table[i], NULL, &layout_table[i]);
+
+	if (vtune_loop) {
+		D_PRINT("Starting vtune loop!\n");
+		while (1)
+			for (i = 0; i < BENCHMARK_COUNT; i++)
+				pl_obj_place(pl_map, &obj_table[i], NULL,
+				             &layout_table[i]);
+	}
+
+	/* Simple layout calculation benchmark */
+	{
+		BENCHMARK_START(1);
+		for (i = 0; i < BENCHMARK_COUNT; i++)
+			pl_obj_place(pl_map, &obj_table[i], NULL,
+				     &layout_table[i]);
+		BENCHMARK_STOP(wallclock_delta_ns, thread_delta_ns);
+		D_PRINT("\nPlacement benchmark results:\n");
+		D_PRINT("# Iterations, Wallclock time delta (ns), thread time "
+			" delta (ns), Wallclock placements per second\n");
+		D_PRINT("%d,%lld,%lld,%lld\n", BENCHMARK_COUNT,
+			wallclock_delta_ns, thread_delta_ns,
+			NANOSECONDS_PER_SECOND * BENCHMARK_COUNT /
+				wallclock_delta_ns);
+	}
+
+	free_pool_and_placement_map(pool_map, pl_map);
+}
+
+
 int
 main(int argc, char **argv)
 {
-	//pl_map_type_t		 map_type = PL_TYPE_RING;
 	uint32_t		 num_domains = DEFAULT_NUM_DOMAINS;
 	uint32_t		 nodes_per_domain = DEFAULT_NODES_PER_DOMAIN;
 	uint32_t		 vos_per_target = DEFAULT_VOS_PER_TARGET;
@@ -444,9 +575,11 @@ main(int argc, char **argv)
 
 	test_op_t op_fn[] = {
 		ring_placement_test,
+		benchmark_placement,
 	};
 	const char *const op_names[] = {
 		"ring-placement-test",
+		"benchmark-placement",
 	};
 	D_ASSERT(ARRAY_SIZE(op_fn) == ARRAY_SIZE(op_names));
 
