@@ -26,6 +26,10 @@
 #include <daos/placement.h>
 #include <daos.h>
 
+#define USE_TIME_PROFILING
+#define TIME_PROFILING_GNUPLOT
+#include "benchmark_util.h"
+
 /*
  * These are only at the top of the file for reference / easy changing
  * Do not use these anywhere except in the main function where arguments are
@@ -252,8 +256,9 @@ free_pool_and_placement_map(struct pool_map *po_map_in,
 	pl_map_decref(pl_map_in);
 }
 
-int
-main(int argc, char **argv)
+static void
+ring_placement_test(uint32_t num_domains, uint32_t nodes_per_domain,
+		    uint32_t vos_per_target)
 {
 	struct pool_map		*po_map;
 	struct pl_map		*pl_map;
@@ -264,25 +269,13 @@ main(int argc, char **argv)
 	struct pl_obj_layout	*lo_3;
 	uuid_t			 pl_uuid;
 	daos_obj_id_t		 oid;
-
-	// TODO Command line arguments!
-	pl_map_type_t		 map_type = PL_TYPE_RING;
-	uint32_t		 num_domains = DEFAULT_NUM_DOMAINS;
-	uint32_t		 nodes_per_domain = DEFAULT_NODES_PER_DOMAIN;
-	uint32_t		 vos_per_target = DEFAULT_VOS_PER_TARGET;
 	uint32_t		 spare_max_num = num_domains * 3;
-	// TODO Command line arguments!
 
 	uint32_t		 spare_tgt_candidate[spare_max_num];
 	uint32_t		 spare_tgt_ranks[spare_max_num];
 	uint32_t		 shard_ids[spare_max_num];
 	uint32_t		 failed_tgts[spare_max_num];
 	unsigned int		 spare_cnt;
-	int			 rc;
-
-	rc = daos_debug_init(NULL);
-	if (rc != 0)
-		return rc;
 
 	uuid_generate(pl_uuid);
 	srand(time(NULL));
@@ -291,7 +284,7 @@ main(int argc, char **argv)
 
 	/* Create reference pool/placement map */
 	gen_pool_and_placement_map(num_domains, nodes_per_domain,
-	                           vos_per_target, map_type,
+	                           vos_per_target, PL_TYPE_RING,
 	                           &po_map, &pl_map);
 	D_ASSERT(po_map != NULL);
 	D_ASSERT(pl_map != NULL);
@@ -390,7 +383,29 @@ main(int argc, char **argv)
 	po_map = NULL;
 	pl_map = NULL;
 
+	D_PRINT("\nRing placement tests passed!\n");
+}
+
+int
+main(int argc, char **argv)
+{
+
+	// TODO Command line arguments!
+	//pl_map_type_t		 map_type = PL_TYPE_RING;
+	uint32_t		 num_domains = DEFAULT_NUM_DOMAINS;
+	uint32_t		 nodes_per_domain = DEFAULT_NODES_PER_DOMAIN;
+	uint32_t		 vos_per_target = DEFAULT_VOS_PER_TARGET;
+	// TODO Command line arguments!
+
+	int			 rc;
+
+	rc = daos_debug_init(NULL);
+	if (rc != 0)
+		return rc;
+
+	ring_placement_test(num_domains, nodes_per_domain, vos_per_target);
+
 	daos_debug_fini();
-	D_PRINT("\nall tests passed!\n");
+
 	return 0;
 }
