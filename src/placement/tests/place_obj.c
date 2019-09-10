@@ -22,6 +22,8 @@
  */
 #define D_LOGFAC	DD_FAC(tests)
 
+#include <getopt.h>
+
 #include <daos/common.h>
 #include <daos/placement.h>
 #include <daos.h>
@@ -39,7 +41,47 @@
 #define DEFAULT_NODES_PER_DOMAIN        1
 #define DEFAULT_VOS_PER_TARGET          4
 
+static void
+print_usage(const char *prog_name, const char *const ops[], uint32_t num_ops)
+{
+	printf("Usage: %s --operation <op> [optional arguments] -- [operation specific arguments]\n"
+	       "\n"
+	       "Required Arguments\n"
+	       "  --operation <op>\n"
+	       "      Short version: -o\n"
+	       "      The operation to invoke\n"
+	       "      Possible values:\n", prog_name);
+
+	for (; num_ops > 0; num_ops--)
+		printf("          %s\n", ops[num_ops - 1]);
+
+	printf("\n"
+	       "Optional Arguments\n"
+	       "  --num-domains <num>\n"
+	       "      Short version: -d\n"
+	       "      Number of domains (i.e. racks) at the highest level of the pool map\n"
+	       "\n"
+	       "      Default: %u\n"
+	       "\n"
+	       "  --nodes-per-domain <num>\n"
+	       "      Short version: -n\n"
+	       "      Number of nodes contained under each top-level domain\n"
+	       "\n"
+	       "      Default: %u\n"
+	       "\n"
+	       "  --vos-per-target <num>\n"
+	       "      Short version: -v\n"
+	       "      Number of VOS containers per target\n"
+	       "\n"
+	       "      Default: %u\n",
+	       DEFAULT_NUM_DOMAINS, DEFAULT_NODES_PER_DOMAIN,
+	       DEFAULT_VOS_PER_TARGET);
+}
+
 static bool g_pl_debug_msg;
+
+typedef void (*test_op_t)(int argc, char **argv, uint32_t num_domains,
+			  uint32_t nodes_per_domain, uint32_t vos_per_target);
 
 static void
 plt_obj_place(struct pl_map *pl_map, daos_obj_id_t oid,
@@ -257,8 +299,8 @@ free_pool_and_placement_map(struct pool_map *po_map_in,
 }
 
 static void
-ring_placement_test(uint32_t num_domains, uint32_t nodes_per_domain,
-		    uint32_t vos_per_target)
+ring_placement_test(int argc, char **argv, uint32_t num_domains,
+		    uint32_t nodes_per_domain, uint32_t vos_per_target)
 {
 	struct pool_map		*po_map;
 	struct pl_map		*pl_map;
@@ -389,21 +431,103 @@ ring_placement_test(uint32_t num_domains, uint32_t nodes_per_domain,
 int
 main(int argc, char **argv)
 {
-
-	// TODO Command line arguments!
 	//pl_map_type_t		 map_type = PL_TYPE_RING;
 	uint32_t		 num_domains = DEFAULT_NUM_DOMAINS;
 	uint32_t		 nodes_per_domain = DEFAULT_NODES_PER_DOMAIN;
 	uint32_t		 vos_per_target = DEFAULT_VOS_PER_TARGET;
-	// TODO Command line arguments!
 
 	int			 rc;
+	int			 i;
+
+	// Backwards compatibility - ring unit test is the default
+	test_op_t operation = ring_placement_test;
+
+	test_op_t op_fn[] = {
+		ring_placement_test,
+	};
+	const char *const op_names[] = {
+		"ring-placement-test",
+	};
+	D_ASSERT(ARRAY_SIZE(op_fn) == ARRAY_SIZE(op_names));
+
+	while (1) {
+		static struct option long_options[] = {
+			{"operation", required_argument, 0, 'o'},
+			{"num-domains", required_argument, 0, 'd'},
+			{"nodes-per-domain", required_argument, 0, 'n'},
+			{"vos-per-target", required_argument, 0, 'v'},
+			{0, 0, 0, 0}
+		};
+		int c;
+		int ret;
+
+		c = getopt_long(argc, argv, "o:d:n:v:", long_options, NULL);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'd':
+			ret = sscanf(optarg, "%u", &num_domains);
+			if (ret != 1) {
+				num_domains = DEFAULT_NUM_DOMAINS;
+				printf("Warning: Invalid num-domains\n"
+				       "  Using default value %u instead\n",
+				       num_domains);
+			}
+			break;
+		case 'n':
+			ret = sscanf(optarg, "%u", &nodes_per_domain);
+			if (ret != 1) {
+				nodes_per_domain = DEFAULT_NODES_PER_DOMAIN;
+				printf("Warning: Invalid nodes-per-domain\n"
+				       "  Using default value %u instead\n",
+				       nodes_per_domain);
+			}
+			break;
+		case 'v':
+			ret = sscanf(optarg, "%u", &vos_per_target);
+			if (ret != 1) {
+				vos_per_target = DEFAULT_VOS_PER_TARGET;
+				printf("Warning: Invalid vos-per-target\n"
+				       "  Using default value %u instead\n",
+				       vos_per_target);
+			}
+			break;
+		case 'o':
+			for (i = 0; i < ARRAY_SIZE(op_fn); i++) {
+				if (strncmp(optarg, op_names[i],
+				            strlen(op_names[i])) == 0) {
+					operation = op_fn[i];
+					break;
+				}
+			}
+			if (i == ARRAY_SIZE(op_fn)) {
+				printf("ERROR: Unknown operation '%s'\n",
+				       optarg);
+				print_usage(argv[0], op_names,
+				            ARRAY_SIZE(op_names));
+				return -1;
+			}
+			break;
+		case '?':
+		default:
+			print_usage(argv[0], op_names, ARRAY_SIZE(op_names));
+			return -1;
+		}
+	}
+
+	if (operation == NULL) {
+		printf("ERROR: operation argument is required!\n");
+
+		print_usage(argv[0], op_names, ARRAY_SIZE(op_names));
+		return -1;
+	}
 
 	rc = daos_debug_init(NULL);
 	if (rc != 0)
 		return rc;
 
-	ring_placement_test(num_domains, nodes_per_domain, vos_per_target);
+	operation(argc, argv, num_domains, nodes_per_domain, vos_per_target);
 
 	daos_debug_fini();
 
