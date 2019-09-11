@@ -250,7 +250,6 @@ set_used(struct d_hash_table *dom_used, struct pool_component *do_comp)
 	struct ht_record *rec;
 	int rc;
 
-	D_PRINT("Adding %d, %d\n", do_comp->co_id, do_comp->co_type);
 	D_ALLOC_PTR(rec);
 	if (rec == NULL) {
 		return -DER_NOMEM;
@@ -269,7 +268,6 @@ is_used(struct d_hash_table *dom_used, struct pool_component *do_comp)
 {
 	uintptr_t key = (uintptr_t)do_comp;
 	d_list_t *rec = d_hash_rec_find(dom_used, &key, sizeof(key));
-	D_PRINT("checking %d, %d %s\n", do_comp->co_id, do_comp->co_type,(rec != NULL) ? "FOUND" : "NOT FOUND" );
 	return rec != NULL;
 }
 
@@ -296,8 +294,8 @@ clrbit_range_dom(struct d_hash_table *dom_used, struct pool_domain *start,
 {
 	int i;
 	for (i = 0; i < count; i++) {
-		d_hash_rec_delete(dom_used, &start[i].do_comp,
-				  sizeof(&start[i].do_comp));
+		uintptr_t key = (uintptr_t)&start[i].do_comp;
+		d_hash_rec_delete(dom_used, &key, sizeof(key));
 	}
 }
 
@@ -369,16 +367,12 @@ get_target(struct pool_domain *curr_dom, struct pool_target **target,
 		uint32_t        num_doms;
 		uint64_t        key;
 
-		/* Retrieve number of nodes in this domain */
-		if (curr_dom->do_children == NULL)
-			num_doms = curr_dom->do_target_nr;
-		else
-			num_doms = curr_dom->do_child_nr;
-
 		key = obj_key;
 
 		/* If choosing target in lowest fault domain level */
 		if (curr_dom->do_children == NULL) {
+			num_doms = curr_dom->do_target_nr;
+
 			do {
 				/*
 				 * Must crc key because jump consistent hash
@@ -406,6 +400,8 @@ get_target(struct pool_domain *curr_dom, struct pool_target **target,
 		} else {
 			int             range_set;
 
+			num_doms = curr_dom->do_child_nr;
+
 			/*
 			 * If all of the nodes in this domain have been used for
 			 * shards but we still have shards to place mark all
@@ -413,22 +409,24 @@ get_target(struct pool_domain *curr_dom, struct pool_target **target,
 			 * can be chosen
 			 */
 			range_set = isset_range_dom(dom_used, curr_dom->do_children,
-						num_doms);
+						    num_doms);
 			if (range_set) {
 				clrbit_range_dom(dom_used, curr_dom->do_children,
-					     num_doms);
+					         num_doms);
 			}
 
 			/*
 			 * Keep choosing new domains until one that has
 			 * not been used is found
 			 */
+			struct pool_domain *temp_dom = curr_dom;
 			do {
 				selected_dom = jump_consistent_hash(key,
 								    num_doms);
-				curr_dom = &(curr_dom->do_children[selected_dom]);
+				temp_dom = &(curr_dom->do_children[selected_dom]);
 				key = crc(key, fail_num++);
-			} while (is_used(dom_used, &curr_dom->do_comp));
+			} while (is_used(dom_used, &temp_dom->do_comp));
+			curr_dom = temp_dom;
 
 			/* Mark this domain as used */
 			rc = set_used(dom_used, &curr_dom->do_comp);
@@ -683,28 +681,21 @@ hop_key_cmp(struct d_hash_table *htable, d_list_t *rlink, const void *key,
 	    unsigned int ksize) {
 	struct ht_record *link = d_list_entry(rlink, struct ht_record, hr_list);
 	uintptr_t *typed_key = (uintptr_t *)key;
-	D_PRINT("TEST1\n");
 	bool result = *typed_key == link->key;
-	D_PRINT("TEST2 %d\n", result);
 	return result;
 }
 
 static int
 hop_key_get(struct d_hash_table *htable, d_list_t *rlink, void **key_pp) {
 	struct ht_record *link = d_list_entry(rlink, struct ht_record, hr_list);
-
-	D_PRINT("TEST3\n");
 	*key_pp = &link->key;
-	D_PRINT("TEST4\n");
 	return sizeof(link->key);
 }
 
 static void
 hop_rec_free(struct d_hash_table *htable, d_list_t *rlink) {
-	D_PRINT("TEST5\n");
 	struct ht_record *link = d_list_entry(rlink, struct ht_record, hr_list);
 	D_FREE_PTR(link);
-	D_PRINT("TEST6\n");
 }
 
 /**

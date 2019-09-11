@@ -76,7 +76,11 @@ print_usage(const char *prog_name, const char *const ops[], uint32_t num_ops)
 	       "      Short version: -v\n"
 	       "      Number of VOS containers per target\n"
 	       "\n"
-	       "      Default: %u\n",
+	       "      Default: %u\n"
+	       "\n"
+	       "  --gdb-wait\n"
+	       "      Short version: -g\n"
+	       "      Starts an infinite loop which can only be escaped via gdb\n",
 	       DEFAULT_NUM_DOMAINS, DEFAULT_NODES_PER_DOMAIN,
 	       DEFAULT_VOS_PER_TARGET);
 }
@@ -433,6 +437,39 @@ ring_placement_test(int argc, char **argv, uint32_t num_domains,
 }
 
 static void
+check_unique_layout(int num_domains, int nodes_per_domain, int vos_per_target,
+                    struct pl_obj_layout **layout_table,
+                    uint32_t num_layouts, uint32_t first_layout)
+{
+	uint32_t i, j;
+	uint8_t *target_map;
+	int total_targets = num_domains * nodes_per_domain * vos_per_target;
+
+	D_ALLOC_ARRAY(target_map, total_targets);
+	for (i = first_layout; i < first_layout + num_layouts; i++) {
+		for (j = 0; j < layout_table[i]->ol_nr; ++j) {
+
+			int index = layout_table[i]->ol_shards[j].po_target;
+
+			if (target_map[index] == 1) {
+				D_PRINT("ERROR, CO-LOCATED SHARDS\n");
+				D_PRINT("Layout of object: %i\n", i);
+
+				for (j = 0; j < layout_table[i]->ol_nr; j++)
+					D_PRINT("%d ",  layout_table[i]->ol_shards[j].po_target);
+				D_PRINT("\n");
+				D_ASSERT(0);
+			} else {
+				target_map[index] = 1;
+			}
+		}
+		memset(target_map, 0, sizeof(*target_map) * total_targets);
+	}
+	D_FREE(target_map);
+}
+
+
+static void
 benchmark_placement_usage() {
 	printf("Placement benchmark usage: -- --map-type <type>\n"
 	       "\n"
@@ -528,9 +565,11 @@ benchmark_placement(int argc, char **argv, uint32_t num_domains,
 		obj_table[i].omd_ver = 1;
 	}
 
-	/* Warm up the cache */
+	/* Warm up the cache and check that it works correctly */
 	for (i = 0; i < BENCHMARK_COUNT; i++)
 		pl_obj_place(pl_map, &obj_table[i], NULL, &layout_table[i]);
+	check_unique_layout(num_domains, nodes_per_domain, vos_per_target,
+	                    layout_table, BENCHMARK_COUNT, 0);
 
 	if (vtune_loop) {
 		D_PRINT("Starting vtune loop!\n");
@@ -863,12 +902,13 @@ main(int argc, char **argv)
 			{"num-domains", required_argument, 0, 'd'},
 			{"nodes-per-domain", required_argument, 0, 'n'},
 			{"vos-per-target", required_argument, 0, 'v'},
+			{"gdb-wait", no_argument, 0, 'g'},
 			{0, 0, 0, 0}
 		};
 		int c;
 		int ret;
 
-		c = getopt_long(argc, argv, "o:d:n:v:", long_options, NULL);
+		c = getopt_long(argc, argv, "o:d:n:v:g", long_options, NULL);
 		if (c == -1)
 			break;
 
@@ -914,6 +954,18 @@ main(int argc, char **argv)
 				print_usage(argv[0], op_names,
 				            ARRAY_SIZE(op_names));
 				return -1;
+			}
+			break;
+		case 'g':
+			{
+				D_PRINT("Entering infinite loop waiting for GDB\n"
+					"Connect via something like:\n"
+					"  gdb -tui attach $(pidof pl_map)\n"
+					"Once connected, run:\n"
+					"  set gdb=1\n"
+					"  continue\n");
+				volatile int gdb = 0;
+				while (!gdb);
 			}
 			break;
 		case '?':
