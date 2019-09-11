@@ -559,6 +559,278 @@ benchmark_placement(int argc, char **argv, uint32_t num_domains,
 	free_pool_and_placement_map(pool_map, pl_map);
 }
 
+#define ADDITION_DEFAULT_NUM_TO_ADD 32
+#define ADDITION_DEFAULT_TEST_ENTRIES 100000
+void
+benchmark_addition_data_movement_usage() {
+	printf("Addition data movement benchmark usage: -- --map-type <type1,type2,...> [optional arguments]\n"
+	       "\n"
+	       "Required Arguments\n"
+	       "  --map-type <type1,type2,...>\n"
+	       "      Short version: -m\n"
+	       "      A comma delimited list of map types to test\n"
+	       "      Possible values:\n"
+	       "          PL_TYPE_RING\n"
+	       "          PL_TYPE_JUMP_MAP\n"
+	       "\n"
+	       "Optional Arguments\n"
+	       "  --num-domains-to-add <num>\n"
+	       "      Short version: -a\n"
+	       "      Number of top-level domains to add\n"
+	       "      Default: %d\n"
+	       "\n"
+	       "  --num-test-entries <num>\n"
+	       "      Short version: -t\n"
+	       "      Number of objects to test placing each iteration\n"
+	       "      Default: %d\n"
+	       "\n"
+	       "  --use-x11\n"
+	       "      Short version: -x\n"
+	       "      Display the resulting graph using x11 instead of the default console\n"
+	       "\n",
+	       ADDITION_DEFAULT_NUM_TO_ADD, ADDITION_DEFAULT_TEST_ENTRIES);
+}
+
+void
+benchmark_addition_data_movement(int argc, char **argv, uint32_t num_domains,
+				 uint32_t nodes_per_domain,
+				 uint32_t vos_per_target)
+{
+	struct pool_map *initial_pool_map;
+	struct pl_map *initial_pl_map;
+	struct daos_obj_md *obj_table;
+	struct pl_obj_layout **initial_layout;
+	struct pl_obj_layout **iter_layout;
+	int obj_idx;
+	int type_idx;
+	int added;
+	int j;
+	char *token;
+	double *percent_moved;
+
+	/*
+	 * This is the total number of requested map types from the user
+	 * It is always +1 more than the user requested - and that last
+	 * index is the "ideal" amount of moved data
+	 */
+	int num_map_types = 0;
+	pl_map_type_t *map_types = NULL;
+	const char **map_keys = NULL;
+	int domains_to_add = ADDITION_DEFAULT_NUM_TO_ADD;
+	int test_entries = ADDITION_DEFAULT_TEST_ENTRIES;
+	bool use_x11 = false;
+
+	D_PRINT("\n\n");
+	D_PRINT("Addition test starting...\n");
+
+	while (1) {
+		static struct option long_options[] = {
+			{"map-type", required_argument, 0, 'm'},
+			{"num-domains-to-add", required_argument, 0, 'a'},
+			{"num-test-entries", required_argument, 0, 't'},
+			{"use-x11", no_argument, 0, 'x'},
+			{0, 0, 0, 0}
+		};
+		int c;
+		int ret;
+
+		c = getopt_long(argc, argv, "m:a:t:x", long_options, NULL);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'm':
+			/* Figure out how many types there are */
+			j = 0;
+			num_map_types = 1;
+			while (optarg[j] != '\0') {
+				if (optarg[j] == ',')
+					num_map_types++;
+				j++;
+			}
+			/* Pad +1 for "ideal" */
+			num_map_types++;
+
+			D_ALLOC_ARRAY(map_types, num_map_types);
+			D_ASSERT(map_types != NULL);
+
+			D_ALLOC_ARRAY(map_keys, num_map_types);
+			D_ASSERT(map_keys != NULL);
+
+			/* Ideal */
+			map_keys[num_map_types - 1] = "Ideal";
+
+			/* Populate the types array */
+			num_map_types = 0;
+			token = strtok(optarg, ",");
+			while (token != NULL) {
+				if (strncmp(token, "PL_TYPE_RING", 12) == 0) {
+					map_types[num_map_types] = PL_TYPE_RING;
+					map_keys[num_map_types] =
+						"PL_TYPE_RING";
+				} else if (strncmp(token, "PL_TYPE_JUMP_MAP", 15)
+					   == 0) {
+					map_types[num_map_types] =
+						PL_TYPE_JUMP_MAP;
+					map_keys[num_map_types] =
+						"PL_TYPE_JUMP_MAP";
+				} else {
+					printf("ERROR: Unknown map-type '%s'\n",
+					       token);
+					benchmark_addition_data_movement_usage();
+					return;
+				}
+				num_map_types++;
+				token = strtok(NULL, ",");
+			}
+			/* Pad +1 for "ideal" */
+			num_map_types++;
+
+			break;
+		case 'a':
+			ret = sscanf(optarg, "%d", &domains_to_add);
+			if (ret != 1 || domains_to_add <= 0) {
+				printf("ERROR: Invalid num-domains-to-add\n");
+				benchmark_addition_data_movement_usage();
+				return;
+			}
+			break;
+		case 't':
+			ret = sscanf(optarg, "%d", &test_entries);
+			if (ret != 1 || test_entries <= 0) {
+				printf("ERROR: Invalid num-test-entries\n");
+				benchmark_addition_data_movement_usage();
+				return;
+			}
+			break;
+		case 'x':
+			use_x11 = true;
+			break;
+		case '?':
+		default:
+			printf("ERROR: Unrecognized argument '%s'\n", optarg);
+			benchmark_addition_data_movement_usage();
+			return;
+		}
+	}
+
+	if (num_map_types == 0) {
+		printf("ERROR: --map-type must be specified!\n");
+		benchmark_addition_data_movement_usage();
+		return;
+	}
+
+	/* Generate list of OIDs to look up */
+	D_ALLOC_ARRAY(obj_table, test_entries);
+	D_ASSERT(obj_table != NULL);
+
+	for (obj_idx = 0; obj_idx < test_entries; obj_idx++) {
+		memset(&obj_table[obj_idx], 0, sizeof(obj_table[obj_idx]));
+		obj_table[obj_idx].omd_id.lo = rand();
+		obj_table[obj_idx].omd_id.hi = 5;
+		daos_obj_generate_id(&obj_table[obj_idx].omd_id, 0,
+				     OC_RP_4G2, 0);
+		obj_table[obj_idx].omd_ver = 1;
+	}
+
+	/* Allocate space for layouts */
+	/* Initial layout - without changes to the map */
+	D_ALLOC_ARRAY(initial_layout, test_entries);
+	D_ASSERT(initial_layout != NULL);
+	/* Per-iteration layout to diff against others */
+	D_ALLOC_ARRAY(iter_layout, test_entries);
+	D_ASSERT(iter_layout != NULL);
+
+	/*
+	 * Allocate space for results data
+	 * This is a flat 2D array of results!
+	 */
+	D_ALLOC_ARRAY(percent_moved, num_map_types * (domains_to_add + 1));
+	D_ASSERT(percent_moved != NULL);
+
+	/* Measure movement for all but ideal case */
+	for (type_idx = 0; type_idx < num_map_types - 1; type_idx++) {
+		/* Create initial reference pool/placement map */
+		gen_pool_and_placement_map(num_domains, nodes_per_domain,
+					   vos_per_target, map_types[type_idx],
+					   &initial_pool_map, &initial_pl_map);
+		D_ASSERT(initial_pool_map != NULL);
+		D_ASSERT(initial_pl_map != NULL);
+
+		/* Initial placement */
+		for (obj_idx = 0; obj_idx < test_entries; obj_idx++)
+			pl_obj_place(initial_pl_map, &obj_table[obj_idx], NULL,
+				     &initial_layout[obj_idx]);
+
+		for (added = 0; added <= domains_to_add; added++) {
+			struct pool_map *iter_pool_map;
+			struct pl_map *iter_pl_map;
+			int num_moved_all_at_once = 0;
+
+			/*
+			 * Generate a new pool/placement map combination for
+			 * this new configuration
+			 */
+			gen_pool_and_placement_map(num_domains + added,
+						   nodes_per_domain,
+						   vos_per_target,
+						   map_types[type_idx],
+						   &iter_pool_map,
+						   &iter_pl_map);
+			D_ASSERT(iter_pool_map != NULL);
+			D_ASSERT(iter_pl_map != NULL);
+
+			/* Calculate new placement using this configuration */
+			for (obj_idx = 0; obj_idx < test_entries; obj_idx++)
+				pl_obj_place(iter_pl_map, &obj_table[obj_idx],
+					     NULL, &iter_layout[obj_idx]);
+
+			/* Compute the number of objects that moved */
+			for (obj_idx = 0; obj_idx < test_entries; obj_idx++) {
+				for (j = 0; j < iter_layout[obj_idx]->ol_nr; j++) {
+					if (iter_layout[obj_idx]->ol_shards[j].po_target !=
+					    initial_layout[obj_idx]->ol_shards[j].po_target)
+						num_moved_all_at_once++;
+				}
+			}
+
+			percent_moved[type_idx * (domains_to_add + 1) + added] =
+				(double)num_moved_all_at_once /
+				((double)test_entries * iter_layout[0]->ol_nr);
+
+			free_pool_and_placement_map(iter_pool_map, iter_pl_map);
+		}
+
+		free_pool_and_placement_map(initial_pool_map, initial_pl_map);
+	}
+
+	/* Calculate the "ideal" data movement */
+	for (added = 0; added <= domains_to_add; added++) {
+		type_idx = num_map_types - 1;
+		percent_moved[type_idx * (domains_to_add + 1) + added] =
+			(double)added * 1 * nodes_per_domain /
+			(1 * nodes_per_domain * num_domains +
+			 added * 1 * nodes_per_domain);
+	}
+
+	/* Print out the data */
+	for (type_idx = 0; type_idx < num_map_types; type_idx++) {
+		D_PRINT("Addition Data: Type %d\n", type_idx);
+		for (added = 0; added <= domains_to_add; added++) {
+			D_PRINT("%f\n",
+				percent_moved[type_idx * (domains_to_add + 1)
+						       + added]);
+		}
+	}
+	D_PRINT("\n");
+
+	BENCHMARK_GRAPH((double *)percent_moved, map_keys, num_map_types,
+			domains_to_add + 1, "Number of added racks",
+			"% Data Moved", 1.0,
+			"Data movement \% when adding racks", "/tmp/gnufifo",
+			use_x11);
+}
+
 
 int
 main(int argc, char **argv)
@@ -576,10 +848,12 @@ main(int argc, char **argv)
 	test_op_t op_fn[] = {
 		ring_placement_test,
 		benchmark_placement,
+		benchmark_addition_data_movement,
 	};
 	const char *const op_names[] = {
 		"ring-placement-test",
 		"benchmark-placement",
+		"benchmark-add",
 	};
 	D_ASSERT(ARRAY_SIZE(op_fn) == ARRAY_SIZE(op_names));
 
