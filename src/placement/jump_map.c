@@ -216,34 +216,6 @@ pl_map2mplmap(struct pl_map *map)
 	return container_of(map, struct pl_jump_map, jmp_map);
 }
 
-/**
- * A helper function to add new targets that have already been used
- * to the list of used targets.
- *
- * \param[in]   ds_list         The list that this target will be
- *                              be added to.
- * \param[in]   target          The target to be added to the list.
- *
- * return       0 if there was no error or a negative error code
- *              otherwise.
- */
-static int
-add_ds_shard(d_list_t *ds_list, struct pool_target *target)
-{
-	struct down_shard *ds_new;
-
-	D_ALLOC_PTR(ds_new);
-	if (ds_new == NULL)
-		return -DER_NOMEM;
-
-	D_INIT_LIST_HEAD(&ds_new->ds_list);
-	ds_new->target_location = target;
-
-	d_list_add(&ds_new->ds_list, ds_list);
-
-	return 0;
-}
-
 int
 set_used(struct d_hash_table *dom_used, struct pool_component *do_comp)
 {
@@ -545,7 +517,8 @@ get_rebuild_target(struct pool_map *pmap, struct pool_target **target,
 		/* Use the last examined target if it's not unavailable */
 		if (!pool_target_unavail(*target) ||
 		    (*target)->ta_comp.co_fseq > md->omd_ver) {
-			rc = add_ds_shard(down_targets, *target);
+			// TODO: Need to use hashmap
+			//rc = add_ds_shard(down_targets, *target);
 			return rc;
 		}
 	}
@@ -755,7 +728,7 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 	hash_ops.hop_rec_free = hop_rec_free;
 
 	rc = d_hash_table_create(D_HASH_FT_NOLOCK | D_HASH_FT_EPHEMERAL,
-				 8, NULL, &hash_ops, &dom_used);
+				 4, NULL, &hash_ops, &dom_used);
 	if (dom_used == NULL || rc != 0)
 		D_GOTO(out, rc);
 
@@ -816,8 +789,6 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 			layout->ol_shards[k].po_target = tgt_id;
 			layout->ol_shards[k].po_shard = k;
 			layout->ol_shards[k].po_fseq = fseq;
-
-			add_ds_shard(&used_targets_list, target);
 
 			/** If target is failed queue it for remap*/
 			if (pool_target_unavail(target)) {
