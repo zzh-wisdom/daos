@@ -725,7 +725,7 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 
 	dom_used_length = (struct pool_domain *)(root->do_targets) - (root) + 1;
 
-	D_ALLOC_ARRAY(dom_used, dom_used_length);
+	D_ALLOC_ARRAY(dom_used, (dom_used_length / 8) + 1);
 	D_ALLOC_ARRAY(used_targets, ((layout->ol_nr) / 8) + 1);
 	D_INIT_LIST_HEAD(&used_targets_list);
 
