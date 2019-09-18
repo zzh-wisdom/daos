@@ -30,15 +30,6 @@
 #include <inttypes.h>
 #include <daos/pool_map.h>
 #include <isa-l.h>
-#include <gurt/hash.h>
-
-struct ht_record {
-	d_list_t            hr_list;
-	union {
-		uintptr_t key;
-		struct pool_component *comp;
-	};
-};
 
 /**
  * Contains information related to object layout size.
@@ -216,88 +207,93 @@ pl_map2mplmap(struct pl_map *map)
 	return container_of(map, struct pl_jump_map, jmp_map);
 }
 
-int
-set_used(struct d_hash_table *dom_used, struct pool_component *do_comp)
+/**
+ * A helper function to add new targets that have already been used
+ * to the list of used targets.
+ *
+ * \param[in]   ds_list         The list that this target will be
+ *                              be added to.
+ * \param[in]   target          The target to be added to the list.
+ *
+ * return       0 if there was no error or a negative error code
+ *              otherwise.
+ */
+static int
+add_ds_shard(d_list_t *ds_list, struct pool_target *target)
 {
-	struct ht_record *rec;
-	int rc;
+	struct down_shard *ds_new;
 
-	D_ALLOC_PTR(rec);
-	if (rec == NULL) {
+	D_ALLOC_PTR(ds_new);
+	if (ds_new == NULL)
 		return -DER_NOMEM;
-	}
 
-	rec->comp = do_comp;
+	D_INIT_LIST_HEAD(&ds_new->ds_list);
+	ds_new->target_location = target;
 
-	rc = d_hash_rec_insert(dom_used, &rec->key, sizeof(rec->key),
-			       &rec->hr_list, true);
+	d_list_add(&ds_new->ds_list, ds_list);
 
-	return rc;
+	return 0;
 }
 
-bool
-is_used(struct d_hash_table *dom_used, struct pool_component *do_comp)
+/**
+ * This function initializes the bit map that is used to determine if a target
+ * that is down was previously selected as a fallback target. This is used to
+ * differentiate between targets that were fallback targets but have since
+ * become unavailable, and targets that were already used as fallback targets
+ * in this layout.
+ *
+ * \param[in]	down_targets	List of targets that are either down, or
+ *				already exist in the layout. Both cannot be
+ *				used as fallback targets.
+ * \param[out]	selected_dom	The top level domain being examined for
+ *				fallback target selection/
+ * \param[in]	used_tgts	The bitmap that this function populates.
+ * \param[in]	skipped_targets The number of skipped targets, used to keep
+ *				track of when we have tried all targets in
+ *				this domain.
+ *
+ * return		An error code, 0 if successful, or less than 0
+ *			denoting an error occurred.
+ */
+static int
+set_used_targets(d_list_t *down_targets, struct pool_domain *selected_dom,
+		 uint8_t **used_tgts, uint32_t *skipped_targets)
 {
-	uintptr_t key = (uintptr_t)do_comp;
-	d_list_t *rec = d_hash_rec_find(dom_used, &key, sizeof(key));
-	return rec != NULL;
-}
 
-int
-isset_range_dom(struct d_hash_table *dom_used, struct pool_domain *start,
-	    uint64_t count)
-{
-	bool all_used = true;
-	int i;
+	struct          pool_target *start_pos;
+	struct          pool_target *end_pos;
+	uint32_t        nums_targets;
+	uint32_t        num_bytes;
+	struct down_shard   *curr_down_tgt;
 
-	for (i = 0; i < count; i++) {
-		if (!is_used(dom_used, &start[i].do_comp)) {
-			all_used = false;
-			break;
+	/* To find rebuild target we examine all targets */
+	nums_targets = selected_dom->do_target_nr;
+	num_bytes = (nums_targets / 8) + 1;
+
+	D_ALLOC_ARRAY(*used_tgts, num_bytes);
+	if (used_tgts == NULL)
+		return -DER_NOMEM;
+
+	start_pos = &(selected_dom->do_targets[0]);
+	end_pos = start_pos + nums_targets;
+	/*
+	 * Add the initial layouts targets to the bitmap of checked
+	 * targets.
+	 */
+
+
+	d_list_for_each_entry(curr_down_tgt, down_targets, ds_list) {
+		struct pool_target *position = curr_down_tgt->target_location;
+
+		if (start_pos <= position && position < end_pos) {
+			setbit(*used_tgts, position - start_pos);
+			(*skipped_targets)++;
 		}
 	}
 
-	return all_used;
+	return 0;
 }
 
-void
-clrbit_range_dom(struct d_hash_table *dom_used, struct pool_domain *start,
-	     uint64_t count)
-{
-	int i;
-	for (i = 0; i < count; i++) {
-		uintptr_t key = (uintptr_t)&start[i].do_comp;
-		d_hash_rec_delete(dom_used, &key, sizeof(key));
-	}
-}
-
-int
-isset_range_ta(struct d_hash_table *dom_used, struct pool_target *start,
-	    uint64_t count)
-{
-	bool all_used = true;
-	int i;
-
-	for (i = 0; i < count; i++) {
-		if (!is_used(dom_used, &start[i].ta_comp)) {
-			all_used = false;
-			break;
-		}
-	}
-
-	return all_used;
-}
-
-void
-clrbit_range_ta(struct d_hash_table *dom_used, struct pool_target *start,
-	     uint64_t count)
-{
-	int i;
-	for (i = 0; i < count; i++) {
-		d_hash_rec_delete(dom_used, &start[i].ta_comp,
-				  sizeof(&start[i].ta_comp));
-	}
-}
 /**
  * This function recursively chooses a single target to be used in the
  * object shard layout. This function is called for every shard that needs a
@@ -322,28 +318,39 @@ clrbit_range_ta(struct d_hash_table *dom_used, struct pool_target *start,
  *                              targets are allowed in the case that there
  *                              are more shards than targets
  *
- * \return      0 on success, error otherwise
+ * \return      an int value indicating if the returned target is available (0)
+ *              or failed (1)
  */
-static int
+static void
 get_target(struct pool_domain *curr_dom, struct pool_target **target,
-	   uint64_t obj_key, struct d_hash_table *dom_used,
-	   struct pl_obj_layout *layout, int shard_num)
+	   uint64_t obj_key, uint8_t *dom_used, struct pl_obj_layout *layout,
+	   int shard_num)
 {
 	uint8_t                 found_target = 0;
 	uint8_t                 top = 0;
 	uint32_t                fail_num = 0;
 	uint32_t                selected_dom;
-	int                     rc;
+	uint32_t                tgt_id;
+	struct pool_domain      *root_pos;
+
+	root_pos = curr_dom;
 
 	do {
 		uint32_t        num_doms;
 		uint64_t        key;
 
-		key = obj_key;
-
-		/* If choosing target in lowest fault domain level */
-		if (curr_dom->do_children == NULL) {
+		/* Retrieve number of nodes in this domain */
+		if (curr_dom->do_children == NULL)
 			num_doms = curr_dom->do_target_nr;
+		else
+			num_doms = curr_dom->do_child_nr;
+
+		key = obj_key;
+		/* If choosing target in lowest fault domain level */
+
+		if (curr_dom->do_children == NULL) {
+			uint32_t dom_id;
+			uint32_t        i;
 
 			do {
 				/*
@@ -360,19 +367,32 @@ get_target(struct pool_domain *curr_dom, struct pool_target **target,
 				/* Retrieve actual target using index */
 				*target = &curr_dom->do_targets[selected_dom];
 
-			} while (is_used(dom_used, &(*target)->ta_comp));
+				/* Get target id to check if target used */
+				dom_id = (*target)->ta_comp.co_id;
 
-			/* Mark this domain as used */
-			rc = set_used(dom_used, &(*target)->ta_comp);
-			if (rc != 0)
-				return rc;
+				/*
+				 * Check to see if this target is valid to use.
+				 * You can reuse targets as long as there are
+				 * fewer targets than shards and all targets
+				 * have already been used
+				 */
+
+				for (i = 0; i < layout->ol_nr; ++i) {
+
+					tgt_id = layout->ol_shards[i].po_target;
+
+					if (tgt_id == dom_id)
+						break;
+				}
+			} while (i < shard_num);
 
 			/* Found target (which may be available or not) */
 			found_target = 1;
 		} else {
 			int             range_set;
+			uint64_t        child_pos;
 
-			num_doms = curr_dom->do_child_nr;
+			child_pos = (curr_dom->do_children) - root_pos;
 
 			/*
 			 * If all of the nodes in this domain have been used for
@@ -380,37 +400,32 @@ get_target(struct pool_domain *curr_dom, struct pool_target **target,
 			 * nodes as unused in bookkeeping array so duplicates
 			 * can be chosen
 			 */
-			range_set = isset_range_dom(dom_used, curr_dom->do_children,
-						    num_doms);
-			if (range_set) {
-				clrbit_range_dom(dom_used, curr_dom->do_children,
-					         num_doms);
+			range_set = isset_range(dom_used, child_pos, child_pos
+						+ num_doms - 1);
+			if (range_set  && curr_dom->do_children != NULL) {
+				clrbit_range(dom_used, child_pos,
+					     child_pos + (num_doms - 1));
 			}
 
 			/*
 			 * Keep choosing new domains until one that has
 			 * not been used is found
 			 */
-			struct pool_domain *temp_dom = curr_dom;
 			do {
+
 				selected_dom = jump_consistent_hash(key,
 								    num_doms);
-				temp_dom = &(curr_dom->do_children[selected_dom]);
 				key = crc(key, fail_num++);
-			} while (is_used(dom_used, &temp_dom->do_comp));
-			curr_dom = temp_dom;
-
+			} while (isset(dom_used, selected_dom + child_pos));
 			/* Mark this domain as used */
-			rc = set_used(dom_used, &curr_dom->do_comp);
-			if (rc != 0)
-				return rc;
+			setbit(dom_used, (selected_dom + child_pos));
 
 			top++;
+			curr_dom = &(curr_dom->do_children[selected_dom]);
 			obj_key = crc(obj_key, top);
 		}
 	} while (!found_target);
 
-	return DER_SUCCESS;
 }
 
 /**
@@ -441,9 +456,8 @@ get_target(struct pool_domain *curr_dom, struct pool_target **target,
  */
 static int
 get_rebuild_target(struct pool_map *pmap, struct pool_target **target,
-		   uint64_t key, struct d_hash_table *dom_used,
-		   d_list_t *down_targets, struct pl_obj_layout *layout,
-		   struct daos_obj_md *md)
+		   uint64_t key, uint8_t *dom_used, d_list_t *down_targets,
+		   struct pl_obj_layout *layout, struct daos_obj_md *md)
 {
 	uint8_t                 *used_tgts = NULL;
 	uint32_t                selected_dom;
@@ -465,14 +479,18 @@ get_rebuild_target(struct pool_map *pmap, struct pool_target **target,
 
 		uint8_t range_set;
 		uint32_t skipped_targets;
+		uint64_t child_pos;
 
 		skipped_targets = 0;
 		num_doms = root->do_child_nr;
+		child_pos = (root->do_children) - root;
 
-		range_set = isset_range_dom(dom_used, root->do_children, num_doms);
+		range_set = isset_range(dom_used, child_pos, child_pos
+					+ num_doms - 1);
 
-		if (range_set) {
-			clrbit_range_dom(dom_used, root->do_children, num_doms);
+		if (range_set  && root->do_children != NULL) {
+			clrbit_range(dom_used, child_pos,
+				     child_pos + (num_doms - 1));
 		}
 
 		/*
@@ -483,10 +501,15 @@ get_rebuild_target(struct pool_map *pmap, struct pool_target **target,
 			key = crc(key, fail_num++);
 			selected_dom = jump_consistent_hash(key, num_doms);
 			target_selection = &(root->do_children[selected_dom]);
-		} while (is_used(dom_used, &target_selection->do_comp));
+		} while (isset(dom_used, (selected_dom + child_pos)));
 
 		/* To find rebuild target we examine all targets */
 		num_doms = target_selection->do_target_nr;
+
+		rc = set_used_targets(down_targets, target_selection,
+				      &used_tgts, &skipped_targets);
+		if (rc)
+			return rc;
 
 		/*
 		 * Attempt to choose a fallback target from all targets found
@@ -517,8 +540,7 @@ get_rebuild_target(struct pool_map *pmap, struct pool_target **target,
 		/* Use the last examined target if it's not unavailable */
 		if (!pool_target_unavail(*target) ||
 		    (*target)->ta_comp.co_fseq > md->omd_ver) {
-			// TODO: Need to use hashmap
-			//rc = add_ds_shard(down_targets, *target);
+			rc = add_ds_shard(down_targets, *target);
 			return rc;
 		}
 	}
@@ -552,7 +574,7 @@ static int
 obj_remap_shards(struct pl_jump_map *jmap, struct daos_obj_md *md,
 		 struct pl_obj_layout *layout, struct jm_obj_placement *jmop,
 		 d_list_t *remap_list, d_list_t *used_targets_list,
-		 struct d_hash_table *dom_used)
+		 uint8_t *dom_used)
 {
 	struct failed_shard     *f_shard;
 	struct pl_obj_shard     *l_shard;
@@ -597,8 +619,8 @@ obj_remap_shards(struct pl_jump_map *jmap, struct daos_obj_md *md,
 
 static int
 jump_map_obj_spec_place_get(struct pl_jump_map *jmap, daos_obj_id_t oid,
-			    struct pool_target **target,
-			    struct d_hash_table *dom_used)
+			    struct pool_target **target, uint8_t *dom_used,
+			    uint32_t dom_bytes)
 {
 	struct pool_target      *tgts;
 	struct pool_domain      *current_dom;
@@ -613,7 +635,7 @@ jump_map_obj_spec_place_get(struct pl_jump_map *jmap, daos_obj_id_t oid,
 		return rc;
 
 	*target = &(tgts[pos]);
-	set_used(dom_used, &(*target)->ta_comp);
+
 
 	rc = pool_map_find_domain(jmap->jmp_map.pl_poolmap, PO_COMP_TP_ROOT,
 				  PO_COMP_ID_ALL, &root);
@@ -623,6 +645,9 @@ jump_map_obj_spec_place_get(struct pl_jump_map *jmap, daos_obj_id_t oid,
 	/* Update collision map to account for this shard. */
 	while (current_dom->do_children != NULL) {
 		int index;
+		uint64_t child_pos;
+
+		child_pos = (current_dom->do_children) - root;
 
 		for (index = 0; index < current_dom->do_child_nr; ++index) {
 			struct pool_domain *temp_dom;
@@ -640,35 +665,13 @@ jump_map_obj_spec_place_get(struct pl_jump_map *jmap, daos_obj_id_t oid,
 
 			if ((start <= (*target)) && ((*target) <= end)) {
 				current_dom = temp_dom;
-				set_used(dom_used, &current_dom->do_comp);
+				setbit(dom_used, (index + child_pos));
 				break;
 			}
 		}
 	}
 
 	return 0;
-}
-
-static bool
-hop_key_cmp(struct d_hash_table *htable, d_list_t *rlink, const void *key,
-	    unsigned int ksize) {
-	struct ht_record *link = d_list_entry(rlink, struct ht_record, hr_list);
-	uintptr_t *typed_key = (uintptr_t *)key;
-	bool result = *typed_key == link->key;
-	return result;
-}
-
-static int
-hop_key_get(struct d_hash_table *htable, d_list_t *rlink, void **key_pp) {
-	struct ht_record *link = d_list_entry(rlink, struct ht_record, hr_list);
-	*key_pp = &link->key;
-	return sizeof(link->key);
-}
-
-static void
-hop_rec_free(struct d_hash_table *htable, d_list_t *rlink) {
-	struct ht_record *link = d_list_entry(rlink, struct ht_record, hr_list);
-	D_FREE_PTR(link);
 }
 
 /**
@@ -691,12 +694,13 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 		  struct jm_obj_placement *jmop, d_list_t *remap_list,
 		  struct daos_obj_md *md)
 {
-	d_hash_table_ops_t      hash_ops = {0};
-	struct d_hash_table     *dom_used;
 	struct pool_target      *target;
 	struct pool_domain      *root;
 	daos_obj_id_t           oid;
 	d_list_t                used_targets_list;
+	uint8_t                 *dom_used;
+	uint8_t                *used_targets;
+	uint32_t                dom_used_length;
 	uint64_t                key;
 	int i, j, k, rc;
 
@@ -711,6 +715,7 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 	rc = 0;
 	target = NULL;
 
+
 	rc = pool_map_find_domain(jmap->jmp_map.pl_poolmap, PO_COMP_TP_ROOT,
 				  PO_COMP_ID_ALL, &root);
 	if (rc == 0) {
@@ -718,23 +723,13 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 		return -DER_NONEXIST;
 	}
 
+	dom_used_length = (struct pool_domain *)(root->do_targets) - (root) + 1;
 
-	hash_ops.hop_key_cmp = hop_key_cmp;
-	hash_ops.hop_key_init = NULL;
-	hash_ops.hop_key_get = hop_key_get;
-	hash_ops.hop_key_hash = NULL;
-	hash_ops.hop_rec_addref = NULL;
-	hash_ops.hop_rec_decref = NULL;
-	hash_ops.hop_rec_free = hop_rec_free;
-
-	rc = d_hash_table_create(D_HASH_FT_NOLOCK | D_HASH_FT_EPHEMERAL,
-				 4, NULL, &hash_ops, &dom_used);
-	if (dom_used == NULL || rc != 0)
-		D_GOTO(out, rc);
-
+	D_ALLOC_ARRAY(dom_used, dom_used_length);
+	D_ALLOC_ARRAY(used_targets, ((layout->ol_nr) / 8) + 1);
 	D_INIT_LIST_HEAD(&used_targets_list);
 
-	if (dom_used == NULL)
+	if (dom_used == NULL || used_targets == NULL)
 		D_GOTO(out, rc);
 
 	/**
@@ -746,7 +741,8 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 	    daos_obj_id2class(oid) == DAOS_OC_R1S_SPEC_RANK ||
 	    daos_obj_id2class(oid) == DAOS_OC_R2S_SPEC_RANK) {
 
-		rc = jump_map_obj_spec_place_get(jmap, oid, &target, dom_used);
+		rc = jump_map_obj_spec_place_get(jmap, oid, &target, dom_used,
+						 dom_used_length);
 
 		if (rc) {
 			D_ERROR("special oid "DF_OID" failed: rc %d\n",
@@ -778,10 +774,8 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 			uint32_t tgt_id;
 			uint32_t fseq;
 
-			rc = get_target(root, &target, crc(key, k), dom_used,
-					layout, k);
-			if (rc)
-				D_GOTO(out, rc);
+			get_target(root, &target, crc(key, k), dom_used,
+				   layout, k);
 
 			tgt_id = target->ta_comp.co_id;
 			fseq = target->ta_comp.co_fseq;
@@ -789,6 +783,8 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 			layout->ol_shards[k].po_target = tgt_id;
 			layout->ol_shards[k].po_shard = k;
 			layout->ol_shards[k].po_fseq = fseq;
+
+			add_ds_shard(&used_targets_list, target);
 
 			/** If target is failed queue it for remap*/
 			if (pool_target_unavail(target)) {
@@ -808,6 +804,8 @@ out:
 		remap_list_free_all(remap_list);
 	}
 
+	if (used_targets)
+		D_FREE(used_targets);
 	if (dom_used)
 		D_FREE(dom_used);
 
@@ -884,6 +882,7 @@ ERR:
 	jump_map_destroy(&jmap->jmp_map);
 	return rc;
 }
+
 
 
 static void
