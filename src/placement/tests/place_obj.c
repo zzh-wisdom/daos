@@ -581,18 +581,25 @@ benchmark_placement(int argc, char **argv, uint32_t num_domains,
 
 	/* Simple layout calculation benchmark */
 	{
-		BENCHMARK_START(1);
+		struct benchmark_handle *bench_hdl;
+
+		bench_hdl = benchmark_alloc();
+		D_ASSERT(bench_hdl != NULL);
+
+		benchmark_start(bench_hdl);
 		for (i = 0; i < BENCHMARK_COUNT; i++)
-			pl_obj_place(pl_map, &obj_table[i], NULL,
-				     &layout_table[i]);
-		BENCHMARK_STOP(wallclock_delta_ns, thread_delta_ns);
+			pl_obj_place(pl_map, &obj_table[i], NULL, &layout_table[i]);
+		benchmark_stop(bench_hdl);
+
 		D_PRINT("\nPlacement benchmark results:\n");
-		D_PRINT("# Iterations, Wallclock time delta (ns), thread time "
-			" delta (ns), Wallclock placements per second\n");
+		D_PRINT("# Iterations, Wallclock time (ns), thread time (ns), Wallclock placements per second\n");
 		D_PRINT("%d,%lld,%lld,%lld\n", BENCHMARK_COUNT,
-			wallclock_delta_ns, thread_delta_ns,
+			bench_hdl->wallclock_delta_ns,
+			bench_hdl->thread_delta_ns,
 			NANOSECONDS_PER_SECOND * BENCHMARK_COUNT /
-				wallclock_delta_ns);
+				bench_hdl->wallclock_delta_ns);
+
+		benchmark_free(bench_hdl);
 	}
 
 	free_pool_and_placement_map(pool_map, pl_map);
@@ -863,7 +870,7 @@ benchmark_addition_data_movement(int argc, char **argv, uint32_t num_domains,
 	}
 	D_PRINT("\n");
 
-	BENCHMARK_GRAPH((double *)percent_moved, map_keys, num_map_types,
+	benchmark_graph((double *)percent_moved, map_keys, num_map_types,
 			domains_to_add + 1, "Number of added racks",
 			"% Data Moved", 1.0,
 			"Data movement \% when adding racks", "/tmp/gnufifo",

@@ -53,59 +53,78 @@
  */
 #define NANOSECONDS_PER_SECOND 1000000000LL
 
-/**
- * Starts a benchmark
- *  \param max_current_time_count_in Maximum number of times BENCHMARK_LOG_CURRENT_TIME() can be invoked before STOP is called
+struct benchmark_handle {
+	struct timespec wallclock_start_time;
+	struct timespec thread_start_time;
+	long long wallclock_delta_ns;
+	long long thread_delta_ns;
+};
+
+/*
+ * Allocates a benchmark data structure
  */
-#define BENCHMARK_START(max_current_time_count_in) \
-	struct timespec wallclock_start_time, thread_start_time; \
-	__attribute__((unused)) struct timespec wallclock_step_times[max_current_time_count_in], thread_step_times[max_current_time_count_in]; \
-	__attribute__((unused)) char *benchmark_step_labels[max_current_time_count_in]; \
-	__attribute__((unused)) int benchmark_num_time_entries = 0; \
-	__attribute__((unused)) int benchmark_max_current_time_count = max_current_time_count_in; \
-	COMPILER_BARRIER(); \
-	(void)clock_gettime( CLOCK_MONOTONIC, &wallclock_start_time ); \
-	(void)clock_gettime( CLOCK_THREAD_CPUTIME_ID, &thread_start_time ); \
-	COMPILER_BARRIER()
+static inline struct benchmark_handle *
+benchmark_alloc(void)
+{
+	struct benchmark_handle *hdl;
+
+	hdl = (struct benchmark_handle *)calloc(sizeof(struct benchmark_handle),
+						1);
+	if (hdl == NULL)
+		return NULL;
+
+	hdl->wallclock_delta_ns = -1;
+	hdl->thread_delta_ns = -1;
+
+	return hdl;
+}
+
+static inline void
+benchmark_start(struct benchmark_handle *hdl)
+{
+	COMPILER_BARRIER();
+	clock_gettime(CLOCK_MONOTONIC, &hdl->wallclock_start_time);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &hdl->thread_start_time);
+	COMPILER_BARRIER();
+}
 
 /**
- * Stops a benchmark and declares local variables to access the results
+ * Stops a benchmark and stores the result in the benchmark handle
  */
-#define BENCHMARK_STOP(wallclock_delta_ns, thread_delta_ns) \
-	struct timespec wallclock_stop_time, thread_stop_time; \
-	COMPILER_BARRIER(); \
-	(void)clock_gettime( CLOCK_MONOTONIC, &wallclock_stop_time ); \
-	(void)clock_gettime( CLOCK_THREAD_CPUTIME_ID, &thread_stop_time ); \
-	long long (wallclock_delta_ns) = ( ( (long long)( wallclock_stop_time.tv_sec - wallclock_start_time.tv_sec ) * NANOSECONDS_PER_SECOND ) + (long long)( wallclock_stop_time.tv_nsec - wallclock_start_time.tv_nsec ) ); \
-	long long (thread_delta_ns) = ( ( (long long)( thread_stop_time.tv_sec - thread_start_time.tv_sec ) * NANOSECONDS_PER_SECOND ) + (long long)( thread_stop_time.tv_nsec - thread_start_time.tv_nsec ) );
+static inline void
+benchmark_stop(struct benchmark_handle *hdl)
+{
+	struct timespec wallclock_stop_time;
+	struct timespec thread_stop_time;
 
+	COMPILER_BARRIER();
+	clock_gettime(CLOCK_MONOTONIC, &wallclock_stop_time);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &thread_stop_time);
+	hdl->wallclock_delta_ns = (((long long)(wallclock_stop_time.tv_sec -
+					hdl->wallclock_start_time.tv_sec) *
+				    NANOSECONDS_PER_SECOND) +
+				   (long long)(wallclock_stop_time.tv_nsec -
+					hdl->wallclock_start_time.tv_nsec));
+	hdl->thread_delta_ns = (((long long)(thread_stop_time.tv_sec -
+					hdl->thread_start_time.tv_sec) *
+				 NANOSECONDS_PER_SECOND) +
+				(long long)(thread_stop_time.tv_nsec -
+					hdl->thread_start_time.tv_nsec));
+}
 
-/* TODO: This is broken and not working yet */
-#define BENCHMARK_FOR_EACH_TIME(benchmark_idx, wallclock_delta_ns, thread_delta_ns) \
-	for (long long (benchmark_idx) = 0, \
-		(wallclock_delta_ns) = ( ( (long long)( wallclock_step_times[benchmark_idx].tv_sec - wallclock_start_time.tv_sec ) * NANOSECONDS_PER_SECOND ) + (long long)( wallclock_step_times[benchmark_idx].tv_nsec - wallclock_start_time.tv_nsec ) ), \
-		(thread_delta_ns) = ( ( (long long)( thread_step_times[benchmark_idx].tv_sec - thread_start_time.tv_sec ) * NANOSECONDS_PER_SECOND ) + (long long)( thread_step_times[benchmark_idx].tv_nsec - thread_start_time.tv_nsec ) ) \
-		; (benchmark_idx) < benchmark_num_time_entries; (benchmark_idx)++)
+static inline void
+benchmark_free(struct benchmark_handle *hdl)
+{
+	if (hdl != NULL)
+		free(hdl);
+}
 
-/**
- * Writes the current value of the realtime clock to a temporary buffer (fast)
- * \param key String to use to identify data from this iteration
- */
-#define BENCHMARK_LOG_CURRENT_TIME(key) \
-	COMPILER_BARRIER(); \
-	if (benchmark_num_time_entries < benchmark_max_current_time_count) { \
-		(void)clock_gettime( CLOCK_MONOTONIC, &wallclock_step_times[benchmark_num_time_entries] ); \
-		(void)clock_gettime( CLOCK_THREAD_CPUTIME_ID, &thread_step_times[benchmark_num_time_entries] ); \
-		benchmark_step_labels[benchmark_num_time_entries] = key; \
-		benchmark_num_time_entries++; \
-	} \
-	COMPILER_BARRIER()
-
-static inline void BENCHMARK_GRAPH(double *ydata, const char **const keys,
-                                   int64_t series_count, int64_t data_count,
-				   const char *xlabel, const char *ylabel,
-				   double y_user_max, const char *title,
-				   const char *fifo_path, const bool use_x11)
+static inline void
+benchmark_graph(double *ydata, const char **const keys,
+		int64_t series_count, int64_t data_count,
+		const char *xlabel, const char *ylabel,
+		double y_user_max, const char *title,
+		const char *fifo_path, const bool use_x11)
 {
 	FILE  *gp_w;
 	FILE  *gp_r;
@@ -194,11 +213,11 @@ static inline void BENCHMARK_GRAPH(double *ydata, const char **const keys,
 
 #else /* USE_TIME_PROFILING */
 
-#define BENCHMARK_START(max_current_time_count_in)
-#define BENCHMARK_STOP(wallclock_delta_ns, thread_delta_ns)
-#define BENCHMARK_FOR_EACH_TIME(benchmark_idx, wallclock_delta_ns, thread_delta_ns)
-#define BENCHMARK_LOG_CURRENT_TIME(key)
-#define BENCHMARK_GRAPH(ydata, data_count, xlabel, ylabel, y_user_max, fifo_path)
+#define benchmark_alloc()
+#define benchmark_start(hdl)
+#define benchmark_stop(hdl)
+#define benchmark_free(hdl)
+#define benchmark_graph(ydata, keys, series_count, data_count, xlabel, ylabel, y_user_max, title, fifo_path, use_x11)
 
 #endif /* USE_TIME_PROFILING */
 
