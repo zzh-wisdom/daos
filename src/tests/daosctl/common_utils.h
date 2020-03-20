@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2018-2019 Intel Corporation.
+ * (C) Copyright 2018-2020 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,15 @@
 int parse_rank_list(char *str_rank_list, d_rank_list_t *num_rank_list);
 int parse_size(char *arg, uint64_t *size);
 int parse_oid(char *oid_str, daos_obj_id_t *oid);
+
+/**
+ * If only one pool exists, get its uuid
+ *
+ * @param[OUT] pool_uuid_str	the pool uuid string found
+ *
+ * @return			true if found a single pool, false otherwise
+ */
+bool get_pool(char *pool_uuid_str);
 
 
 #endif /* __DAOS_API_H__ */

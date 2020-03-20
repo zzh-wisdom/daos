@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2016-2018 Intel Corporation.
+ * (C) Copyright 2016-2020 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -210,7 +210,7 @@ create_hdlr(int argc, char *argv[])
 	/* Print the pool service replica ranks. */
 	for (i = 0; i < svc.rl_nr - 1; i++)
 		printf("%u:", svc.rl_ranks[i]);
-	printf("%u\n", svc.rl_ranks[svc.rl_nr - 1]);
+	printf("BANG: %u\n", svc.rl_ranks[svc.rl_nr - 1]);
 
 	return 0;
 }

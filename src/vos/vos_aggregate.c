@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2019 Intel Corporation.
+ * (C) Copyright 2019-2020 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1913,6 +1913,7 @@ merge_window_init(struct agg_merge_window *mw, void (*func)(void *))
 int
 vos_aggregate(daos_handle_t coh, daos_epoch_range_t *epr, void (*func)(void *))
 {
+	D_PRINT("[RYON] %s:%d [%s()] > \n", __FILE__, __LINE__, __FUNCTION__);
 	struct vos_container	*cont = vos_hdl2cont(coh);
 	vos_iter_param_t	 iter_param = { 0 };
 	struct vos_agg_param	 agg_param = { 0 };

@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2018 Intel Corporation.
+ * (C) Copyright 2018-2020 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ struct cmd_struct {
 
 int cmd_create_container(int argc, const char **argv, void *ctx);
 int cmd_create_pool(int argc, const char **argv, void *ctx);
+int cmd_list_pools(int argc, const char **argv, void *ctx);
 int cmd_destroy_container(int argc, const char **argv, void *ctx);
 int cmd_destroy_pool(int argc, const char **argv, void *ctx);
 int cmd_evict_pool(int argc, const char **argv, void *ctx);
@@ -51,7 +52,10 @@ int cmd_test_connect_pool(int argc, const char **argv, void *ctx);
 int cmd_test_evict_pool(int argc, const char **argv, void *ctx);
 int cmd_test_query_pool(int argc, const char **argv, void *ctx);
 int cmd_kill_server(int argc, const char **argv, void *ctx);
+int cmd_write_string(int argc, const char **argv, void *ctx);
+int cmd_read_string(int argc, const char **argv, void *ctx);
 int cmd_write_pattern(int argc, const char **argv, void *ctx);
 int cmd_verify_pattern(int argc, const char **argv, void *ctx);
+int cmd_list_obj_class(int argc, const char **argv, void *ctx);
 
 #endif /* _DAOSCTL_BUILTIN_H_ */

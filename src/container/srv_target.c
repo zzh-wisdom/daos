@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2016-2019 Intel Corporation.
+ * (C) Copyright 2016-2020 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -259,7 +259,6 @@ cont_aggregate_ult(void *arg)
 	while (!cont->sc_abort_vos_aggregating &&
 	       !dss_xstream_exiting(dmi->dmi_xstream)) {
 		uint64_t sleep; /* nano secs */
-
 		rc = cont_child_aggregate(cont, &sleep);
 		if (rc == -DER_SHUTDOWN) {
 			break;	/* pool destroyed */

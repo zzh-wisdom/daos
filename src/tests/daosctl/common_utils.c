@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2018 Intel Corporation.
+ * (C) Copyright 2018-2020 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,4 +88,23 @@ parse_size(char *arg, uint64_t *size)
 		break;
 	}
 	return 0;
+}
+
+bool
+get_pool(char *pool_uuid_str)
+{
+	int rc;
+
+	daos_mgmt_pool_info_t pool = {0};
+	daos_size_t pool_nr = 1;
+	rc = daos_mgmt_list_pools("daos_server", &pool_nr, &pool, NULL);
+	if (rc != 0)
+		return false;
+
+	if (pool_nr == 0)
+		return false;
+
+	uuid_unparse(pool.mgpi_uuid, pool_uuid_str);
+
+	return true;
 }

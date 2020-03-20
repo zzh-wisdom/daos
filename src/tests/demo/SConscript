@@ -1,0 +1,25 @@
+"""Build demo"""
+import daos_build
+
+def scons():
+    """Execute build"""
+
+    Import('env', 'prereqs')
+
+    env.AppendUnique(LIBPATH=[Dir('.')])
+
+    libs = ['daos', 'gurt', 'daos_common', 'uuid',
+            'cart', 'pmem', 'pmemobj', 'daos_tests']
+    sources = ['demo.c']
+
+    denv = env.Clone()
+
+
+    #denv.AppendUnique(CFLAGS=['-std=gnu99'])
+    #denv.AppendUnique(CPPDEFINES=['TEST'])
+
+    demo_client = denv.Program('demo_client', sources, LIBS=libs)
+    env.Install('$PREFIX/bin/', demo_client)
+
+if __name__ == "SCons.Script":
+    scons()
