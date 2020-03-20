@@ -708,69 +708,81 @@ static void
 fetch_with_multiple_extents(void **state)
 {
 	/** Fetching a subset of original extent (not chunk aligned) */
-	ARRAY_UPDATE_FETCH_TESTCASE(state, {
-		.chunksize = 8,
-		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC64,
-		.server_verify = false,
-		.rec_size = 8,
-		.recx_cfgs = {
-			{.idx = 0, .nr = 1024, .data = "A"},
-		},
-		.fetch_recx = {.rx_idx = 2, .rx_nr = 8},
-	});
+//	ARRAY_UPDATE_FETCH_TESTCASE(state, {
+//		.chunksize = 8,
+//		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC64,
+//		.server_verify = false,
+//		.rec_size = 8,
+//		.recx_cfgs = {
+//			{.idx = 0, .nr = 1024, .data = "A"},
+//		},
+//		.fetch_recx = {.rx_idx = 2, .rx_nr = 8},
+//	});
+//
+//	/** Extents not aligned with chunksize */
+//	ARRAY_UPDATE_FETCH_TESTCASE(state, {
+//		.chunksize = 2,
+//		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC64,
+//		.server_verify = false,
+//		.rec_size = 1,
+//		.recx_cfgs = {
+//			{.idx = 0, .nr = 3, .data = "ABC"},
+//			{.idx = 1, .nr = 2, .data = "B"},
+//		},
+//		.fetch_recx = {.rx_idx = 0, .rx_nr = 3},
+//	});
+//
+//	/** Heavily overlapping extents broken up into many chunks */
+//	ARRAY_UPDATE_FETCH_TESTCASE(state, {
+//		.chunksize = 8,
+//		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC32,
+//		.server_verify = false,
+//		.rec_size = 1,
+//		.recx_cfgs = {
+//			{.idx = 2, .nr = 510, .data = "ABCDEFG"},
+//			{.idx = 0, .nr = 512, .data = "1234567890"},
+//		},
+//		.fetch_recx = {.rx_idx = 0, .rx_nr = 511},
+//	});
+//
+//	/** Extents with small overlap */
+//	ARRAY_UPDATE_FETCH_TESTCASE(state, {
+//		.chunksize = 1024,
+//		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC16,
+//		.server_verify = false,
+//		.rec_size = 1,
+//		.recx_cfgs = {
+//			{.idx = 2, .nr = 512, .data = "A"},
+//			{.idx = 500, .nr = 512, .data = "B"},
+//		},
+//		.fetch_recx = {.rx_idx = 2, .rx_nr = 1012},
+//	});
+//
+//	/** several smallish extents within a single chunk */
+//	ARRAY_UPDATE_FETCH_TESTCASE(state, {
+//		.chunksize = 1024 * 32,
+//		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC64,
+//		.server_verify = false,
+//		.rec_size = 8,
+//		.recx_cfgs = {
+//			{.idx = 2, .nr = 512, .data = "A"},
+//			{.idx = 500, .nr = 512, .data = "B"},
+//			{.idx = 1000, .nr = 512, .data = "C"},
+//			{.idx = 1500, .nr = 512, .data = "D"},
+//		},
+//		.fetch_recx = {.rx_idx = 2, .rx_nr = 800},
+//	});
 
-	/** Extents not aligned with chunksize */
 	ARRAY_UPDATE_FETCH_TESTCASE(state, {
-		.chunksize = 2,
+		.chunksize = 4,
 		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC64,
 		.server_verify = false,
 		.rec_size = 1,
 		.recx_cfgs = {
-			{.idx = 0, .nr = 3, .data = "ABC"},
-			{.idx = 1, .nr = 2, .data = "B"},
+			{.idx = 4, .nr = 12, .data = "123456789012"},
+			{.idx = 4, .nr = 8, .data = "12345678"},
 		},
-		.fetch_recx = {.rx_idx = 0, .rx_nr = 3},
-	});
-
-	/** Heavily overlapping extents broken up into many chunks */
-	ARRAY_UPDATE_FETCH_TESTCASE(state, {
-		.chunksize = 8,
-		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC32,
-		.server_verify = false,
-		.rec_size = 1,
-		.recx_cfgs = {
-			{.idx = 2, .nr = 510, .data = "ABCDEFG"},
-			{.idx = 0, .nr = 512, .data = "1234567890"},
-		},
-		.fetch_recx = {.rx_idx = 0, .rx_nr = 511},
-	});
-
-	/** Extents with small overlap */
-	ARRAY_UPDATE_FETCH_TESTCASE(state, {
-		.chunksize = 1024,
-		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC16,
-		.server_verify = false,
-		.rec_size = 1,
-		.recx_cfgs = {
-			{.idx = 2, .nr = 512, .data = "A"},
-			{.idx = 500, .nr = 512, .data = "B"},
-		},
-		.fetch_recx = {.rx_idx = 2, .rx_nr = 1012},
-	});
-
-	/** several smallish extents within a single chunk */
-	ARRAY_UPDATE_FETCH_TESTCASE(state, {
-		.chunksize = 1024 * 32,
-		.csum_prop_type = DAOS_PROP_CO_CSUM_CRC64,
-		.server_verify = false,
-		.rec_size = 8,
-		.recx_cfgs = {
-			{.idx = 2, .nr = 512, .data = "A"},
-			{.idx = 500, .nr = 512, .data = "B"},
-			{.idx = 1000, .nr = 512, .data = "C"},
-			{.idx = 1500, .nr = 512, .data = "D"},
-		},
-		.fetch_recx = {.rx_idx = 2, .rx_nr = 800},
+		.fetch_recx = {.rx_idx = 4, .rx_nr = 12},
 	});
 
 	/** Extents with holes */
@@ -789,6 +801,86 @@ ARRAY_UPDATE_FETCH_TESTCASE(state, {
 	});
 #endif
 }
+
+static void
+test_larger_arrays(void **state)
+{
+	struct csum_test_ctx	ctx = {0};
+	daos_oclass_id_t	oc = dts_csum_oc;
+	uint32_t		rec_size = 1;
+	int			rc;
+	int			i;
+
+	int			block_size = 1 * 1024 * 1024;
+	int 			write_transfer_size = 512;
+	int 			read_transfer_size = 1024;
+	size_t			max_data_size = max(write_transfer_size,
+							  read_transfer_size);
+	daos_recx_t		fetch_recx;
+	uint64_t 		chunk_size = 1024*32;
+
+	d_iov_set(&ctx.dkey, "dkey", strlen("dkey"));
+
+	d_iov_set(&ctx.update_iod.iod_name, "akey", strlen("akey"));
+
+	/** setup the buffers for update & fetch */
+	d_sgl_init(&ctx.update_sgl, 1);
+	iov_alloc(&ctx.update_sgl.sg_iovs[0], max_data_size);
+
+	d_sgl_init(&ctx.fetch_sgl, 1);
+	iov_alloc(&ctx.fetch_sgl.sg_iovs[0], max_data_size);
+
+	/** Setup Update IOD */
+	ctx.update_iod.iod_size = rec_size;
+	/** These thest cases always use 1 recx at a time */
+	ctx.update_iod.iod_nr	= 1;
+	ctx.update_iod.iod_recxs = ctx.recx;
+	ctx.update_iod.iod_type  = DAOS_IOD_ARRAY;
+
+	/** Setup Fetch IOD*/
+	ctx.fetch_iod.iod_name = ctx.update_iod.iod_name;
+	ctx.fetch_iod.iod_size = ctx.update_iod.iod_size;
+	ctx.fetch_iod.iod_recxs = &fetch_recx;
+	ctx.fetch_iod.iod_nr = ctx.update_iod.iod_nr;
+	ctx.fetch_iod.iod_type = ctx.update_iod.iod_type;
+
+	setup_from_test_args(&ctx, *state);
+	setup_cont_obj(&ctx, DAOS_PROP_CO_CSUM_CRC16, false,
+		       chunk_size, oc);
+
+	/** Update */
+	uint64_t idx = 0;
+	for (i = 0; i < block_size / write_transfer_size; i++) {
+		ctx.recx[0].rx_nr = write_transfer_size;
+		ctx.recx[0].rx_idx = idx;
+		idx += write_transfer_size;
+		iov_update_fill(&ctx.update_sgl.sg_iovs[0],
+				"AAA", write_transfer_size);
+		rc = daos_obj_update(ctx.oh, DAOS_TX_NONE, 0, &ctx.dkey, 1,
+				     &ctx.update_iod, &ctx.update_sgl,
+				     NULL);
+		if (rc != 0)
+			fail_msg("daos_obj_update failed with %d", rc);
+	}
+
+	/** fetch */
+	idx = 0;
+	for (i = 0; i < block_size / read_transfer_size; i++) {
+		fetch_recx.rx_nr = read_transfer_size;
+		fetch_recx.rx_idx = idx;
+		idx += read_transfer_size;
+
+		rc = daos_obj_fetch(ctx.oh, DAOS_TX_NONE, 0, &ctx.dkey, 1,
+				    &ctx.fetch_iod, &ctx.fetch_sgl, NULL, NULL);
+		if (rc != 0)
+			fail_msg("daos_obj_fetch failed with %d", rc);
+	}
+
+	/** Clean up */
+	cleanup_data(&ctx);
+	cleanup_cont_obj(&ctx);
+}
+
 
 static void
 single_value_test(void **state, bool large_buf)
@@ -1222,6 +1314,7 @@ static const struct CMUnitTest csum_tests[] = {
 	CSUM_TEST("DAOS_CSUM08: Update/Fetch D Key", test_update_fetch_d_key),
 	CSUM_TEST("DAOS_CSUM09: Enumerate A Keys", test_enumerate_a_key),
 	CSUM_TEST("DAOS_CSUM10: Enumerate D Keys", test_enumerate_d_key),
+	CSUM_TEST("DAOS_CSUM11: Lots of Array I/O", test_larger_arrays),
 
 	EC_CSUM_TEST("DAOS_EC_CSUM00: csum disabled", checksum_disabled),
 	EC_CSUM_TEST("DAOS_EC_CSUM01: simple update with server side verify",

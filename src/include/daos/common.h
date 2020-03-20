@@ -573,6 +573,16 @@ enum {
 #define DAOS_CHECKSUM_UPDATE_DKEY_FAIL	(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x26)
 #define DAOS_CHECKSUM_FETCH_DKEY_FAIL	(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x27)
 
+/** 'network corruption' is faked for update on client side, just before
+ * sending to server and/or on server side  in handler before any verification.
+ *
+ */
+#define DAOS_CHECKSUM_FAULT_NETWORK	(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x28)
+ /** 'disk corruption' is faked for update on server side after checksum
+  * verification in bsgl before post  (not sure this works actually, need to test)
+  */
+#define DAOS_CHECKSUM_FAULT_DISK	(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x29)
+
 #define DAOS_DTX_COMMIT_SYNC		(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x30)
 #define DAOS_DTX_LEADER_ERROR		(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x31)
 #define DAOS_DTX_NONLEADER_ERROR	(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x32)

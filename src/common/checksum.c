@@ -342,7 +342,8 @@ daos_csummer_update(struct daos_csummer *obj, uint8_t *buf, size_t buf_len)
 	int rc = 0;
 
 	if (C_TRACE_ENABLED()) {
-		C_TRACE("Buffer (buf=%p len=%lu) (type=%s): ", buf, buf_len,
+		C_TRACE("Checksum created for %lu bytes\n", buf_len);
+		C_TRACE("Buffer (buf=%p len=%lu) (type=%s): \n", buf, buf_len,
 			daos_csummer_get_name(obj));
 		trace_chars(buf, buf_len, 50);
 		C_TRACE("\n");
@@ -582,7 +583,7 @@ calc_csum_recx(struct daos_csummer *obj, d_sg_list_t *sgl,
 
 	for (i = 0; i < nr; i++) { /** for each extent/checksum buf */
 		csum_nr = daos_recx_calc_chunks(recxs[i], rec_len, chunk_size);
-		C_TRACE("csum_nr: %lu\n", csum_nr);
+		C_TRACE("Calculating %lu checksum(s) for Array Value", csum_nr);
 		bytes = recxs[i].rx_nr * rec_len;
 
 		for (j = 0; j < csum_nr; j++) {
@@ -624,6 +625,7 @@ calc_csum_sv(struct daos_csummer *obj, d_sg_list_t *sgl, size_t rec_len,
 	if (!(daos_csummer_initialized(obj)))
 		return 0;
 
+	C_TRACE("Calculating checksum for Single Value");
 	if (singv_lo != NULL && singv_lo->cs_even_dist == 1) {
 		D_ASSERT(singv_lo->cs_bytes > 0 &&
 			 singv_lo->cs_bytes < rec_len);
@@ -1138,4 +1140,16 @@ checksum_sgl_cb(uint8_t *buf, size_t len, void *args)
 	struct daos_csummer *obj = args;
 
 	return daos_csummer_update(obj, buf, len);
+}
+
+void
+dcf_corrupt(d_sg_list_t *sgls, uint32_t nr)
+{
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		d_sg_list_t *sgl = &sgls[i];
+		((char *)sgl->sg_iovs->iov_buf)[0] += 2;
+	}
+
 }

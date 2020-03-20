@@ -2275,7 +2275,7 @@ obj_comp_cb(tse_task_t *task, void *data)
 			obj_auxi->io_retry = 1;
 
 		if (task->dt_result == -DER_CSUM) {
-			if (!obj_auxi->spec_shard && !obj_auxi->no_retry &&
+			if (!obj_auxi->no_retry &&
 			    obj_auxi->opc == DAOS_OBJ_RPC_FETCH) {
 				if (!obj_auxi->csum_retry &&
 				    !obj_auxi->csum_report) {
@@ -2436,6 +2436,10 @@ csum_obj_update(struct dc_object *obj, daos_obj_update_t *args,
 	if (DAOS_FAIL_CHECK(DAOS_CHECKSUM_UPDATE_FAIL))
 		((char *)iod_csums[0].ic_data->cs_csum)[0]++;
 
+	/** Fake corruption over network */
+	if (DAOS_FAIL_CHECK(DAOS_CHECKSUM_FAULT_NETWORK))
+		dcf_corrupt(args->sgls, args->nr);
+
 	obj_auxi->rw_args.iod_csums = iod_csums;
 	obj_auxi->rw_args.dkey_csum = dkey_csum;
 
@@ -2489,6 +2493,7 @@ static int
 obj_retry_csum_err(struct dc_object *obj, struct obj_auxi_args *obj_auxi,
 		     uint64_t dkey_hash, unsigned int map_ver, uint8_t *bitmap)
 {
+	D_ERROR("CSUM ERROR: Retrying another replication");
 	struct daos_oclass_attr	*oca;
 	unsigned int		 next_shard, retry_size, shard_cnt, shard_idx;
 	int			 rc = 0;
@@ -2697,6 +2702,9 @@ dc_obj_update(tse_task_t *task)
 		if (rc) {
 			D_ERROR("csum_obj_update error: %d", rc);
 			goto out_task;
+		}
+		if (DAOS_FAIL_CHECK(DAOS_CHECKSUM_UPDATE_FAIL)) {
+			((char *)args->sgls->sg_iovs->iov_buf)[0]++;
 		}
 	}
 

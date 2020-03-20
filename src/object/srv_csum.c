@@ -128,6 +128,7 @@ cc_verify_orig_extents(struct csum_context *ctx)
 	uint32_t		 v;
 
 	for (v = 0; v < to_verify_nr; v++) {
+		C_TRACE("Verifying original extent");
 		uint8_t			 csum[csum_len];
 		bool			 match;
 		struct to_verify	*verify;
@@ -141,8 +142,10 @@ cc_verify_orig_extents(struct csum_context *ctx)
 
 		match = daos_csummer_csum_compare(csummer, csum,
 						  verify->tv_csum, csum_len);
-		if (!match)
+		if (!match) {
+			D_ERROR("Original extent corrupted");
 			return -DER_CSUM;
+		}
 	}
 
 	return 0;
@@ -539,8 +542,12 @@ ds_csum_add2iod(daos_iod_t *iod, struct daos_csummer *csummer,
 		daos_recx_t		*recx = &iod->iod_recxs[i];
 		struct dcs_csum_info	*info = &iod_csums->ic_data[i];
 
-		if (ctx.cc_rec_len > 0 && ci_is_valid(info))
+		if (ctx.cc_rec_len > 0 && ci_is_valid(info)) {
 			rc = cc_add_csums_for_recx(&ctx, recx, info);
+			if (rc != 0) {
+				D_ERROR("Failed to add csum for recx");
+			}
+		}
 	}
 
 	/** return the count of biov csums used. */
