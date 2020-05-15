@@ -1,0 +1,19 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:sysfs_init
+   fun:_dl_init
+   obj:/usr/lib64/ld-2.17.so
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:register_cb
+   fun:tse_task_register_cbs
+   fun:sched_test_2
+   fun:main
+}

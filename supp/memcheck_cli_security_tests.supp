@@ -1,0 +1,61 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: indirect
+   fun:calloc
+   fun:drpc_call
+   fun:request_credentials_via_drpc
+   fun:dc_sec_request_creds
+   fun:test_request_credentials_fails_if_drpc_call_fails
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: indirect
+   fun:calloc
+   fun:drpc_call
+   fun:request_credentials_via_drpc
+   fun:dc_sec_request_creds
+   fun:test_request_credentials_closes_socket_when_call_fails
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:sysfs_init
+   fun:_dl_init
+   obj:/usr/lib64/ld-2.17.so
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:drpc_call
+   fun:request_credentials_via_drpc
+   fun:dc_sec_request_creds
+   fun:test_request_credentials_fails_if_drpc_call_fails
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:drpc_call
+   fun:request_credentials_via_drpc
+   fun:dc_sec_request_creds
+   fun:test_request_credentials_closes_socket_when_call_fails
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}

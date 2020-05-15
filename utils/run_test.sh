@@ -79,6 +79,7 @@ if [ -d "/mnt/daos" ]; then
         SL_PREFIX=$PWD/${SL_PREFIX/*\/install/install}
     fi
 
+    echo "Running Cmocka tests"
     run_test "${SL_BUILD_DIR}/src/cart/src/utest/test_linkage"
     run_test "${SL_BUILD_DIR}/src/cart/src/utest/test_gurt"
     run_test "${SL_BUILD_DIR}/src/cart/src/utest/utest_hlc"
@@ -146,6 +147,57 @@ if [ -d "/mnt/daos" ]; then
             exit 1
         fi
     fi
+
+    # Valgrind memcheck
+
+    set -x
+    set -e
+    echo "Running Valgrind memcheck"
+    which valgrind
+    #MEMCHECK="valgrind --leak-check=full --show-reachable=yes --error-limit=no --gen-suppressions=all --log-file"
+    MEMCHECK="valgrind --leak-check=full --show-reachable=yes --error-limit=no --gen-suppressions=all --suppressions=supp"
+    eval "${MEMCHECK}/memcheck_test_linkage.supp ${SL_BUILD_DIR}/src/cart/src/utest/test_linkage" &>> log
+    eval "${MEMCHECK}/memcheck_test_gurt.supp ${SL_BUILD_DIR}/src/cart/src/utest/test_gurt" &>> log
+    eval "${MEMCHECK}/memcheck_utest_hlc.supp ${SL_BUILD_DIR}/src/cart/src/utest/utest_hlc" &>> log
+    eval "${MEMCHECK}/memcheck_utest_swim.supp ${SL_BUILD_DIR}/src/cart/src/utest/utest_swim" &>> log
+    eval "${MEMCHECK}/memcheck_vos_tests_all.supp ${SL_PREFIX}/bin/vos_tests -A 500" &>> log
+    eval "${MEMCHECK}/memcheck_vos_tests_all_n.supp ${SL_PREFIX}/bin/vos_tests -n -A 500" &>> log
+    export DAOS_IO_BYPASS=pm
+    eval "${MEMCHECK}/memcheck_vos_tests_all_pm.supp ${SL_PREFIX}/bin/vos_tests -A 50" &>> log
+    eval export DAOS_IO_BYPASS=pm_snap
+    eval "${MEMCHECK}/memcheck_vos_tests_all_pm_snap.supp ${SL_PREFIX}/bin/vos_tests -A 50" &>> log
+    unset DAOS_IO_BYPASS
+    eval "${MEMCHECK}/memcheck_btree_ukey.supp src/common/tests/btree.sh ukey -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_direct.supp src/common/tests/btree.sh direct -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree.supp src/common/tests/btree.sh -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_perf.supp  src/common/tests/btree.sh perf -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_perf_direct.supp src/common/tests/btree.sh perf direct -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_perf_ukey.supp src/common/tests/btree.sh perf ukey -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_dyn_ukey.supp src/common/tests/btree.sh dyn ukey -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_dyn.supp src/common/tests/btree.sh dyn -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_dyn_perf.supp src/common/tests/btree.sh dyn perf -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_btree_dyn_perf_ukey.supp src/common/tests/btree.sh dyn perf ukey -s 20000" &>> log
+    eval "${MEMCHECK}/memcheck_umem_tests.supp ${SL_BUILD_DIR}/src/common/tests/umem_test" &>> log
+    eval "${MEMCHECK}/memcheck_sched.supp ${SL_BUILD_DIR}/src/common/tests/sched" &>> log
+    eval "${MEMCHECK}/memcheck_drpc_tests.supp ${SL_BUILD_DIR}/src/common/tests/drpc_tests" &>> log
+    eval "${MEMCHECK}/memcheck_eq_tests.supp ${SL_BUILD_DIR}/src/client/api/tests/eq_tests" &>> log
+    eval "${MEMCHECK}/memcheck_smd_ut.supp ${SL_BUILD_DIR}/src/bio/smd/tests/smd_ut" &>> log
+    eval "${MEMCHECK}/memcheck_evt_ctl.supp  src/vos/tests/evt_ctl.sh" &>> log
+    eval "${MEMCHECK}/memcheck_evt_ctl_pmem.supp src/vos/tests/evt_ctl.sh pmem" &>> log
+    eval "${MEMCHECK}/memcheck_vea_ut.supp ${SL_PREFIX}/bin/vea_ut" &>> log
+    eval "${MEMCHECK}/memcheck_cli_security_tests.supp ${SL_BUILD_DIR}/src/security/tests/cli_security_tests" &>> log
+    eval "${MEMCHECK}/memcheck_srv_acl_tests.supp ${SL_BUILD_DIR}/src/security/tests/srv_acl_tests" &>> log
+    eval "${MEMCHECK}/memcheck_acl_api_tests.supp ${SL_BUILD_DIR}/src/common/tests/acl_api_tests" &>> log
+    eval "${MEMCHECK}/memcheck_acl_util_tests.supp ${SL_BUILD_DIR}/src/common/tests/acl_valid_tests" &>> log
+    eval "${MEMCHECK}/memcheck_acl_util_tests.supp ${SL_BUILD_DIR}/src/common/tests/acl_util_tests" &>> log
+    eval "${MEMCHECK}/memcheck_acl_principal_tests.supp ${SL_BUILD_DIR}/src/common/tests/acl_principal_tests" &>> log
+    eval "${MEMCHECK}/memcheck_acl_real_tests.supp ${SL_BUILD_DIR}/src/common/tests/acl_real_tests" &>> log
+    eval "${MEMCHECK}/memcheck_prop_tests.supp ${SL_BUILD_DIR}/src/common/tests/prop_tests" &>> log
+    eval "${MEMCHECK}/memcheck_drpc_progress_tests.supp ${SL_BUILD_DIR}/src/iosrv/tests/drpc_progress_tests" &>> log
+    eval "${MEMCHECK}/memcheck_drpc_handler_tests.supp ${SL_BUILD_DIR}/src/iosrv/tests/drpc_handler_tests" &>> log
+    eval "${MEMCHECK}/memcheck_drpc_listener_tests.supp ${SL_BUILD_DIR}/src/iosrv/tests/drpc_listener_tests" &>> log
+    eval "${MEMCHECK}/memcheck_srv_drpc_tests.supp ${SL_BUILD_DIR}/src/mgmt/tests/srv_drpc_tests" &>> log
+
 else
     echo "/mnt/daos isn't present for unit tests"
 fi

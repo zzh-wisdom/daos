@@ -1,0 +1,137 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strndup
+   fun:prop_to_acl_response
+   fun:ds_mgmt_drpc_pool_get_acl
+   fun:test_drpc_pool_get_acl_success
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strndup
+   fun:prop_to_acl_response
+   fun:ds_mgmt_drpc_pool_overwrite_acl
+   fun:test_drpc_pool_overwrite_acl_success
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strndup
+   fun:prop_to_acl_response
+   fun:ds_mgmt_drpc_pool_update_acl
+   fun:test_drpc_pool_update_acl_success
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:strndup
+   fun:prop_to_acl_response
+   fun:ds_mgmt_drpc_pool_delete_acl
+   fun:test_drpc_pool_delete_acl_success
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:sysfs_init
+   fun:_dl_init
+   obj:/usr/lib64/ld-2.17.so
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:do_alloc
+   fun:protobuf_c_message_unpack
+   fun:expect_drpc_list_cont_resp_with_containers
+   fun:test_drpc_pool_list_cont_no_containers
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: indirect
+   fun:malloc
+   fun:do_alloc
+   fun:protobuf_c_message_unpack
+   fun:expect_drpc_list_cont_resp_with_containers
+   fun:test_drpc_pool_list_cont_with_containers
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: indirect
+   fun:malloc
+   fun:do_alloc
+   fun:protobuf_c_message_unpack
+   fun:parse_required_member
+   fun:parse_repeated_member
+   fun:parse_member
+   fun:protobuf_c_message_unpack
+   fun:expect_drpc_list_cont_resp_with_containers
+   fun:test_drpc_pool_list_cont_with_containers
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: indirect
+   fun:malloc
+   fun:do_alloc
+   fun:parse_required_member
+   fun:parse_optional_member
+   fun:parse_member
+   fun:protobuf_c_message_unpack
+   fun:parse_required_member
+   fun:parse_repeated_member
+   fun:parse_member
+   fun:protobuf_c_message_unpack
+   fun:expect_drpc_list_cont_resp_with_containers
+   fun:test_drpc_pool_list_cont_with_containers
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:do_alloc
+   fun:protobuf_c_message_unpack
+   fun:expect_drpc_list_cont_resp_with_containers
+   fun:test_drpc_pool_list_cont_with_containers
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}

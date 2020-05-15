@@ -1,0 +1,101 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:User
+   fun:pmemobj_tx_add_snapshot
+   fun:pmemobj_tx_add_common.constprop.20
+   fun:pmemobj_tx_add_range_direct
+   fun:umem_tx_add_ptr
+   fun:merge_free_ext
+   fun:persistent_free
+   fun:vea_free
+   fun:ut_free
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:vea_hint_load
+   fun:ut_interleaved_ops
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:sysfs_init
+   fun:_dl_init
+   obj:/usr/lib64/ld-2.17.so
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:vea_reserve
+   fun:ut_reserve_special
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:vea_reserve
+   fun:ut_inval_params_cancel
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:vea_reserve
+   fun:ut_inval_params_tx_publish
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:vea_reserve
+   fun:ut_free_invalid_space
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: indirect
+   fun:calloc
+   fun:vea_reserve
+   fun:ut_fragmentation
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:vea_reserve
+   fun:ut_fragmentation
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:(below main)
+}

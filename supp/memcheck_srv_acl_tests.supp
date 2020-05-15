@@ -1,0 +1,22 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:pack_validate_resp_in_drpc_call_resp_body
+   fun:init_valid_cred
+   fun:init_default_cred
+   fun:test_cont_can_delete
+   obj:/usr/lib64/libcmocka.so.0.7.0
+   fun:_cmocka_run_group_tests
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:sysfs_init
+   fun:_dl_init
+   obj:/usr/lib64/ld-2.17.so
+}
