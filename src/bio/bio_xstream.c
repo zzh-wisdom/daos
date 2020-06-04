@@ -910,6 +910,8 @@ init_blobstore_ctxt(struct bio_xs_context *ctxt, int tgt_id)
 		/* Load blobstore with bstype specified for sanity check */
 		bs = load_blobstore(ctxt, d_bdev->bb_bdev, &d_bdev->bb_uuid,
 				    false);
+
+                bs = NULL;
 		if (bs == NULL)
 			return -DER_INVAL;
 
