@@ -324,6 +324,7 @@ get_attach_info(const char *name, int *npsrs, struct dc_mgmt_psr **psrs,
 
 	/* Prepare the GetAttachInfo request. */
 	req.sys = (char *)name;
+	req.allranks = true;
 	reqb_size = mgmt__get_attach_info_req__get_packed_size(&req);
 	D_ALLOC(reqb, reqb_size);
 	if (reqb == NULL) {
@@ -579,6 +580,8 @@ attach_group(const char *name, int npsrs, struct dc_mgmt_psr *psrs,
 {
 	crt_group_t    *group;
 	int		i;
+	int		i_psr;
+	bool		rand_psr = false;
 	int		rc;
 
 	rc = crt_group_view_create((char *)name, &group);
@@ -588,6 +591,13 @@ attach_group(const char *name, int npsrs, struct dc_mgmt_psr *psrs,
 		goto err;
 	}
 
+	d_getenv_bool("RAND_PSR", &rand_psr);
+	if (rand_psr)
+		i_psr = npsrs * ((rand() - 1) / (float)RAND_MAX);
+	else
+		i_psr = 0;
+
+	D_INFO("adding %d ranks\n", npsrs);
 	for (i = 0; i < npsrs; i++) {
 		rc = crt_group_primary_rank_add(daos_get_crt_ctx(), group,
 						psrs[i].rank, psrs[i].uri);
@@ -597,11 +607,16 @@ attach_group(const char *name, int npsrs, struct dc_mgmt_psr *psrs,
 			goto err_group;
 		}
 
-		rc = crt_group_psr_set(group, psrs[i].rank);
-		if (rc != 0) {
-			D_ERROR("failed to set rank %u as group %s PSR: %d\n",
-				psrs[i].rank, name, rc);
-			goto err_group;
+		/* crt can take only one PSR at the moment. */
+		if (i == i_psr) {
+			D_INFO("setting rank %u (%s) as PSR\n", psrs[i].rank,
+			       psrs[i].uri);
+			rc = crt_group_psr_set(group, psrs[i].rank);
+			if (rc != 0) {
+				D_ERROR("failed to set rank %u as group %s "
+					"PSR: %d\n", psrs[i].rank, name, rc);
+				goto err_group;
+			}
 		}
 	}
 
