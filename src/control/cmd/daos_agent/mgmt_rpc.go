@@ -136,6 +136,7 @@ func (mod *mgmtModule) handleGetAttachInfo(reqb []byte, pid int32) ([]byte, erro
 	ctx := context.TODO() // FIXME: Should be the top-level context.
 	resp, err := control.GetAttachInfo(ctx, mod.ctlInvoker, &control.GetAttachInfoReq{
 		System: pbReq.Sys,
+		AllRanks: pbReq.AllRanks,
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "GetAttachInfo %+v", pbReq)
