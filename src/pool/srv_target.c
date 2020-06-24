@@ -52,6 +52,7 @@
 #include <daos_srv/rebuild.h>
 #include "rpc.h"
 #include "srv_internal.h"
+#define TODO(format, ...) D_PRINT("TODO: %s: "format"\n", __func__, ##__VA_ARGS__)
 
 /* ds_pool_child **************************************************************/
 
@@ -741,6 +742,7 @@ ds_pool_tgt_connect(struct ds_pool *pool, struct pool_iv_conn *pic)
 	struct ds_pool_hdl	*hdl = NULL;
 	d_iov_t			cred_iov;
 	int			rc;
+	TODO("ENTER");
 
 	hdl = ds_pool_hdl_lookup(pic->pic_hdl);
 	if (hdl != NULL) {
@@ -1037,6 +1039,8 @@ ds_pool_tgt_fetch_hdls_handler(crt_rpc_t *rpc)
 	int				 rc = DER_SUCCESS;
 	struct pool_iv_conn		*conn;
 
+	TODO("ENTER");
+
 	D_DEBUG(DF_DSMS, DF_UUID": processing rpc",
 		DP_UUID(in->tfi_pool_uuid));
 
@@ -1048,6 +1052,8 @@ ds_pool_tgt_fetch_hdls_handler(crt_rpc_t *rpc)
 	}
 
 	conn = in->tfi_hdls.iov_buf;
+	TODO("Pre loop check");
+	TODO("buf size: %zu", in->tfi_hdls.iov_buf_len);
 
 	/* This while loop check first checks that there is room in the buffer
 	 * for the struct itself (not including the variable length creds field)
@@ -1059,6 +1065,11 @@ ds_pool_tgt_fetch_hdls_handler(crt_rpc_t *rpc)
 	       ((char *)conn - (char *)in->tfi_hdls.iov_buf +
 		sizeof(struct pool_iv_conn) +
 		conn->pic_cred_size <= in->tfi_hdls.iov_buf_len)) {
+
+		TODO("CONN HANDLE: uuid: "DF_UUID, DP_UUID(conn->pic_hdl));
+		TODO("CONN HANDLE: pic_flags: %08lX", conn->pic_flags);
+		TODO("CONN HANDLE: pic_capas: %08lX", conn->pic_capas);
+		TODO("CONN HANDLE: pic_creds_size: %u", conn->pic_cred_size);
 
 		rc = ds_pool_tgt_connect(pool, conn);
 		if (rc != 0) {
@@ -1076,6 +1087,7 @@ ds_pool_tgt_fetch_hdls_handler(crt_rpc_t *rpc)
 out:
 	ds_pool_put(pool);
 
+	TODO("EXIT rc="DF_RC, DP_RC(rc));
 	out->tfo_rc = rc;
 	crt_reply_send(rpc);
 }
