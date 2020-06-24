@@ -36,8 +36,11 @@
 #include "vos_internal.h"
 #include "evt_priv.h"
 
+#define ACT_EMB_NR	4
+
 /** I/O context */
 struct vos_io_context {
+	d_list_t		 ic_link;
 	daos_epoch_range_t	 ic_epr;
 	daos_unit_oid_t		 ic_oid;
 	struct vos_container	*ic_cont;
@@ -49,6 +52,7 @@ struct vos_io_context {
 	struct bio_desc		*ic_biod;
 	/** Checksums for bio_iovs in \ic_biod */
 	struct dcs_csum_info	*ic_biov_csums;
+	struct dcs_csum_info	 ic_biov_csums_buf;
 	uint32_t		 ic_biov_csums_at;
 	uint32_t		 ic_biov_csums_nr;
 	/** current dkey info */
@@ -62,8 +66,10 @@ struct vos_io_context {
 	unsigned int		 ic_actv_cnt;
 	unsigned int		 ic_actv_at;
 	struct pobj_action	*ic_actv;
+	struct pobj_action	 ic_actv_buf[ACT_EMB_NR];
 	/** reserved offsets for SCM update */
 	umem_off_t		*ic_umoffs;
+	umem_off_t		 ic_umoffs_buf[ACT_EMB_NR];
 	unsigned int		 ic_umoffs_cnt;
 	unsigned int		 ic_umoffs_at;
 	/** reserved NVMe extents */
@@ -121,12 +127,12 @@ vos_ioc_reserve_fini(struct vos_io_context *ioc)
 	D_ASSERT(d_list_empty(&ioc->ic_blk_exts));
 	D_ASSERT(ioc->ic_actv_at == 0);
 
-	if (ioc->ic_actv_cnt != 0) {
+	if (ioc->ic_actv != NULL && ioc->ic_actv != &ioc->ic_actv_buf[0]) {
 		D_FREE(ioc->ic_actv);
 		ioc->ic_actv = NULL;
 	}
 
-	if (ioc->ic_umoffs != NULL) {
+	if (ioc->ic_umoffs != NULL && ioc->ic_umoffs != &ioc->ic_umoffs_buf[0]) {
 		D_FREE(ioc->ic_umoffs);
 		ioc->ic_umoffs = NULL;
 	}
@@ -146,20 +152,31 @@ vos_ioc_reserve_init(struct vos_io_context *ioc)
 		total_acts += iod->iod_nr;
 	}
 
-	D_ALLOC_ARRAY(ioc->ic_umoffs, total_acts);
-	if (ioc->ic_umoffs == NULL)
-		return -DER_NOMEM;
+	if (total_acts > ACT_EMB_NR) {
+		D_ALLOC_ARRAY(ioc->ic_umoffs, total_acts);
+		if (ioc->ic_umoffs == NULL)
+			return -DER_NOMEM;
+	} else {
+		ioc->ic_umoffs = &ioc->ic_umoffs_buf[0];
+	}
 
 	if (vos_ioc2umm(ioc)->umm_ops->mo_reserve == NULL)
 		return 0;
 
-	D_ALLOC_ARRAY(ioc->ic_actv, total_acts);
-	if (ioc->ic_actv == NULL)
-		return -DER_NOMEM;
+	if (total_acts > ACT_EMB_NR) {
+		D_ALLOC_ARRAY(ioc->ic_actv, total_acts);
+		if (ioc->ic_actv == NULL)
+			return -DER_NOMEM;
+	} else {
+		ioc->ic_actv = &ioc->ic_actv_buf[0];
+	}
 
 	ioc->ic_actv_cnt = total_acts;
 	return 0;
 }
+
+__thread d_list_t ioc_cache;
+__thread bool	  ioc_cache_init;
 
 static void
 vos_ioc_destroy(struct vos_io_context *ioc, bool evict)
@@ -167,7 +184,7 @@ vos_ioc_destroy(struct vos_io_context *ioc, bool evict)
 	if (ioc->ic_biod != NULL)
 		bio_iod_free(ioc->ic_biod);
 
-	if (ioc->ic_biov_csums != NULL)
+	if (ioc->ic_biov_csums != NULL && ioc->ic_biov_csums != &ioc->ic_biov_csums_buf)
 		D_FREE(ioc->ic_biov_csums);
 
 	if (ioc->ic_obj)
@@ -177,7 +194,9 @@ vos_ioc_destroy(struct vos_io_context *ioc, bool evict)
 	vos_ilog_fetch_finish(&ioc->ic_dkey_info);
 	vos_ilog_fetch_finish(&ioc->ic_akey_info);
 	vos_cont_decref(ioc->ic_cont);
-	D_FREE(ioc);
+
+	memset(ioc, 0, sizeof(*ioc));
+	d_list_add(&ioc->ic_link, &ioc_cache);
 }
 
 static int
@@ -197,9 +216,20 @@ vos_ioc_create(daos_handle_t coh, daos_unit_oid_t oid, bool read_only,
 		goto error;
 	}
 
-	D_ALLOC_PTR(ioc);
-	if (ioc == NULL)
-		return -DER_NOMEM;
+	if (!ioc_cache_init) {
+		D_INIT_LIST_HEAD(&ioc_cache);
+		ioc_cache_init = true;
+	}
+
+	if (!d_list_empty(&ioc_cache)) {
+		ioc = d_list_entry(ioc_cache.next, struct vos_io_context,
+				   ic_link);
+		d_list_del_init(&ioc->ic_link);
+	} else {
+		D_ALLOC_PTR(ioc);
+		if (ioc == NULL)
+			return -DER_NOMEM;
+	}
 
 	ioc->ic_iod_nr = iod_nr;
 	ioc->ic_iods = iods;
@@ -234,11 +264,7 @@ vos_ioc_create(daos_handle_t coh, daos_unit_oid_t oid, bool read_only,
 
 	ioc->ic_biov_csums_nr = 1;
 	ioc->ic_biov_csums_at = 0;
-	D_ALLOC_ARRAY(ioc->ic_biov_csums, ioc->ic_biov_csums_nr);
-	if (ioc->ic_biov_csums == NULL) {
-		rc = -DER_NOMEM;
-		goto error;
-	}
+	ioc->ic_biov_csums = &ioc->ic_biov_csums_buf;
 
 	for (i = 0; i < iod_nr; i++) {
 		int iov_nr = iods[i].iod_nr;
@@ -320,7 +346,11 @@ bsgl_csums_resize(struct vos_io_context *ioc)
 		struct dcs_csum_info *new_infos;
 		uint32_t	 new_nr = dcb_nr * 2;
 
-		D_REALLOC_ARRAY(new_infos, csums, new_nr);
+		if (csums != &ioc->ic_biov_csums_buf)
+			D_REALLOC_ARRAY(new_infos, csums, new_nr);
+		else
+			D_ALLOC_ARRAY(new_infos, new_nr);
+
 		if (new_infos == NULL)
 			return -DER_NOMEM;
 

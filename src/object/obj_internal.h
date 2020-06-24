@@ -353,6 +353,7 @@ struct ds_obj_exec_arg {
 	struct ds_cont_hdl	*cont_hdl;
 	struct ds_cont_child	*cont;
 	void			*args;
+	void			*ioc;
 	uint32_t		 flags;
 };
 
