@@ -37,7 +37,7 @@ static uint32_t obj_id_gen	= 1;
 static uint64_t int_key_gen	= 1;
 
 daos_obj_id_t
-dts_oid_gen(uint16_t oclass, uint8_t ofeats, unsigned seed)
+dts_oid_gen(uint16_t oclass, uint16_t ofeats, unsigned seed)
 {
 	daos_obj_id_t	oid;
 	uint64_t	hdr;
@@ -58,7 +58,7 @@ dts_oid_gen(uint16_t oclass, uint8_t ofeats, unsigned seed)
 }
 
 daos_unit_oid_t
-dts_unit_oid_gen(uint16_t oclass, uint8_t ofeats, uint32_t shard)
+dts_unit_oid_gen(uint16_t oclass, uint16_t ofeats, uint32_t shard)
 {
 	daos_unit_oid_t	uoid;
 

@@ -76,6 +76,7 @@ bool			 ts_zero_copy;
 bool			 ts_verify_fetch;
 /* shuffle the offsets of the array */
 bool			 ts_shuffle	= false;
+bool			 no_inline_copy = false;
 
 daos_handle_t		*ts_ohs;		/* all opened objects */
 daos_obj_id_t		 ts_oid;		/* object ID */
@@ -297,7 +298,11 @@ objects_update(d_rank_t rank)
 	int		i;
 	int		j;
 	int		rc;
+	uint16_t	feats = 0;
 	daos_epoch_t	epoch = 0;
+
+	if (no_inline_copy)
+		feats |= DAOS_OF_NO_INL_COPY;
 
 	dts_reset_key();
 
@@ -305,7 +310,7 @@ objects_update(d_rank_t rank)
 		++epoch;
 
 	for (i = 0; i < ts_obj_p_cont; i++) {
-		ts_oid = dts_oid_gen(ts_class, 0, ts_ctx.tsc_mpi_rank);
+		ts_oid = dts_oid_gen(ts_class, feats, ts_ctx.tsc_mpi_rank);
 		if (ts_class == DAOS_OC_R2S_SPEC_RANK)
 			ts_oid = dts_oid_set_rank(ts_oid, rank);
 
@@ -873,6 +878,7 @@ static struct option ts_ops[] = {
 	{ "recx",	required_argument,	NULL,	'r' },
 	{ "array",	no_argument,		NULL,	'A' },
 	{ "size",	required_argument,	NULL,	's' },
+	{ "no_copy",	no_argument,		NULL,	'p' },
 	{ "zcopy",	no_argument,		NULL,	'z' },
 	{ "overwrite",	no_argument,		NULL,	't' },
 	{ "nest_iter",	no_argument,		NULL,	'n' },
@@ -989,7 +995,7 @@ main(int argc, char **argv)
 
 	memset(ts_pmem_file, 0, sizeof(ts_pmem_file));
 	while ((rc = getopt_long(argc, argv,
-				 "P:N:T:C:c:o:d:a:r:nASG:s:ztf:hUFRBvIiuw",
+				 "pP:N:T:C:c:o:d:a:r:nASG:s:ztf:hUFRBvIiuw",
 				 ts_ops, NULL)) != -1) {
 		char	*endp;
 
@@ -1050,6 +1056,9 @@ main(int argc, char **argv)
 		case 'P':
 			scm_size = strtoul(optarg, &endp, 0);
 			scm_size = ts_val_factor(scm_size, *endp);
+			break;
+		case 'p':
+			no_inline_copy = true;
 			break;
 		case 'N':
 			nvme_size = strtoul(optarg, &endp, 0);

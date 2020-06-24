@@ -33,6 +33,7 @@
 #include "obj_internal.h"
 
 unsigned int	srv_io_mode = DIM_DTX_FULL_ENABLED;
+unsigned int	bulk_limit  = OBJ_BULK_LIMIT;
 
 /**
  * Initialize object interface
@@ -51,6 +52,9 @@ dc_obj_init(void)
 		srv_io_mode = DIM_DTX_FULL_ENABLED;
 		D_DEBUG(DB_IO, "Full dtx mode by default\n");
 	}
+	d_getenv_int("BULK_LIMIT", &bulk_limit);
+	if (bulk_limit < 2048 || bulk_limit > 8192)
+		bulk_limit = OBJ_BULK_LIMIT;
 
 	rc = obj_utils_init();
 	if (rc)
