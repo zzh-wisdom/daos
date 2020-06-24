@@ -178,7 +178,7 @@ spec_place_rank_get(unsigned int *pos, daos_obj_id_t oid,
 	tgts_nr = pool_map_target_nr(pl_poolmap);
 	/* locate rank in the pool map targets */
 	rank = daos_oclass_sr_get_rank(oid);
-	tgt = daos_oclass_st_get_tgt(oid);
+	tgt = daos_oclass_st_get_tgt(oid) % tgts_nr;
 
 	for (current_index = 0; current_index < tgts_nr; current_index++) {
 		if (rank == tgts[current_index].ta_comp.co_rank &&
