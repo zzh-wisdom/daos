@@ -89,6 +89,7 @@ bool			 ts_nest_iterator;
 bool			ts_rebuild_only_iteration = false;
 /* rebuild without update */
 bool			ts_rebuild_no_update = false;
+bool			ts_flat_obj = false;
 
 static int
 vos_update_or_fetch(enum ts_op_type op_type, struct dts_io_credit *cred,
@@ -303,6 +304,8 @@ objects_update(d_rank_t rank)
 
 	if (no_inline_copy)
 		feats |= DAOS_OF_NO_INL_COPY;
+	if (ts_flat_obj)
+		feats |= DAOS_OF_KV_FLAT;
 
 	dts_reset_key();
 
@@ -882,6 +885,7 @@ static struct option ts_ops[] = {
 	{ "zcopy",	no_argument,		NULL,	'z' },
 	{ "overwrite",	no_argument,		NULL,	't' },
 	{ "nest_iter",	no_argument,		NULL,	'n' },
+	{ "flat",	no_argument,		NULL,	'l' },
 	{ "file",	required_argument,	NULL,	'f' },
 	{ "help",	no_argument,		NULL,	'h' },
 	{ "verify",	no_argument,		NULL,	'v' },
@@ -995,7 +999,7 @@ main(int argc, char **argv)
 
 	memset(ts_pmem_file, 0, sizeof(ts_pmem_file));
 	while ((rc = getopt_long(argc, argv,
-				 "pP:N:T:C:c:o:d:a:r:nASG:s:ztf:hUFRBvIiuw",
+				 "pP:N:T:C:c:o:d:a:r:nASG:s:ztf:hUFRBvIiluw",
 				 ts_ops, NULL)) != -1) {
 		char	*endp;
 
@@ -1119,6 +1123,9 @@ main(int argc, char **argv)
 		case 'i':
 			ts_rebuild_only_iteration = true;
 			break;
+		case 'l':
+			ts_flat_obj = true;
+			break;
 		case 'u':
 			ts_rebuild_no_update = true;
 			break;
@@ -1138,6 +1145,11 @@ main(int argc, char **argv)
 				ts_print_usage();
 			return 0;
 		}
+	}
+	if (ts_flat_obj && ts_akey_p_dkey != 1) {
+		fprintf(stderr, "flat object has no akey, akey_per_dkey=%d\n",
+			ts_akey_p_dkey);
+		return -1;
 	}
 
 	if (seed == 0) {
