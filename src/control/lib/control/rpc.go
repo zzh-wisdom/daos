@@ -193,6 +193,7 @@ func (c *Client) InvokeUnaryRPCAsync(parent context.Context, req UnaryRequest) (
 				reqTimeout = tg.getTimeout()
 			}
 		}
+		c.Debugf("request timeout: %s", reqTimeout)
 		ctx, cancel := context.WithTimeout(parent, reqTimeout)
 		defer cancel()
 

@@ -27,6 +27,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize/english"
 	"github.com/pkg/errors"
@@ -156,9 +157,10 @@ type storageFormatCmd struct {
 	ctlInvokerCmd
 	hostListCmd
 	jsonOutputCmd
-	Verbose  bool   `short:"v" long:"verbose" description:"Show results of each SCM & NVMe device format operation"`
-	Reformat bool   `long:"reformat" description:"Reformat storage overwriting any existing filesystem (CAUTION: Potentially destructive)"`
-	Ranks    string `long:"ranks" short:"r" description:"Comma separated list of system ranks to format, default is all ranks"`
+	Verbose  bool          `short:"v" long:"verbose" description:"Show results of each SCM & NVMe device format operation"`
+	Reformat bool          `long:"reformat" description:"Reformat storage overwriting any existing filesystem (CAUTION: Potentially destructive)"`
+	Ranks    string        `long:"ranks" short:"r" description:"Comma separated list of system ranks to format, default is all ranks"`
+	Timeout  time.Duration `long:"timeout" short:"t" description:"Optional timeout value (default: 5m)"`
 }
 
 // shouldReformatSystem queries system to interrogate membership before deciding
@@ -228,8 +230,12 @@ func (cmd *storageFormatCmd) Execute(args []string) (err error) {
 		return err
 	}
 	if !sysReformat {
-		req := &control.StorageFormatReq{Reformat: cmd.Reformat}
+		req := &control.StorageFormatReq{
+			Timeout:  cmd.Timeout,
+			Reformat: cmd.Reformat,
+		}
 		req.SetHostList(cmd.hostlist)
+		cmd.log.Debugf("format req: %+v", req)
 		resp, err := control.StorageFormat(ctx, cmd.ctlInvoker, req)
 		if err != nil {
 			return err

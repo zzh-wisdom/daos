@@ -27,6 +27,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
@@ -156,6 +157,7 @@ type (
 		UserGroup  string
 		ACL        *AccessControlList
 		UUID       string
+		Timeout    time.Duration
 	}
 
 	// PoolCreateResp contains the response from a pool create request.
@@ -164,6 +166,10 @@ type (
 		SvcReps []uint32
 	}
 )
+
+func (pcr *PoolCreateReq) getTimeout() time.Duration {
+	return pcr.Timeout
+}
 
 // PoolCreate performs a pool create operation on a DAOS Management Server instance.
 // Default values for missing request parameters (e.g. owner/group) are generated when

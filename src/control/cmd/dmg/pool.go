@@ -29,6 +29,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
@@ -70,15 +71,16 @@ type PoolCreateCmd struct {
 	logCmd
 	ctlInvokerCmd
 	jsonOutputCmd
-	GroupName  string `short:"g" long:"group" description:"DAOS pool to be owned by given group, format name@domain"`
-	UserName   string `short:"u" long:"user" description:"DAOS pool to be owned by given user, format name@domain"`
-	ACLFile    string `short:"a" long:"acl-file" description:"Access Control List file path for DAOS pool"`
-	ScmSize    string `short:"s" long:"scm-size" required:"1" description:"Size of SCM component of DAOS pool"`
-	NVMeSize   string `short:"n" long:"nvme-size" description:"Size of NVMe component of DAOS pool"`
-	RankList   string `short:"r" long:"ranks" description:"Storage server unique identifiers (ranks) for DAOS pool"`
-	NumSvcReps uint32 `short:"v" long:"nsvc" default:"1" description:"Number of pool service replicas"`
-	Sys        string `short:"S" long:"sys" default:"daos_server" description:"DAOS system that pool is to be a part of"`
-	UUID       string `short:"p" long:"pool" description:"UUID to be used when creating the pool, randomly generated if not specified"`
+	GroupName  string        `short:"g" long:"group" description:"DAOS pool to be owned by given group, format name@domain"`
+	UserName   string        `short:"u" long:"user" description:"DAOS pool to be owned by given user, format name@domain"`
+	ACLFile    string        `short:"a" long:"acl-file" description:"Access Control List file path for DAOS pool"`
+	ScmSize    string        `short:"s" long:"scm-size" required:"1" description:"Size of SCM component of DAOS pool"`
+	NVMeSize   string        `short:"n" long:"nvme-size" description:"Size of NVMe component of DAOS pool"`
+	RankList   string        `short:"r" long:"ranks" description:"Storage server unique identifiers (ranks) for DAOS pool"`
+	NumSvcReps uint32        `short:"v" long:"nsvc" default:"1" description:"Number of pool service replicas"`
+	Sys        string        `short:"S" long:"sys" default:"daos_server" description:"DAOS system that pool is to be a part of"`
+	UUID       string        `short:"p" long:"pool" description:"UUID to be used when creating the pool, randomly generated if not specified"`
+	Timeout    time.Duration `long:"timeout" short:"t" description:"Optional timeout value (default: 5m)"`
 }
 
 // Execute is run when PoolCreateCmd subcommand is activated
@@ -133,7 +135,7 @@ func (c *PoolCreateCmd) Execute(args []string) error {
 		ScmBytes: scmBytes, NvmeBytes: nvmeBytes, Ranks: ranks,
 		NumSvcReps: c.NumSvcReps, Sys: c.Sys,
 		User: c.UserName, UserGroup: c.GroupName, ACL: acl,
-		UUID: c.UUID,
+		UUID: c.UUID, Timeout: c.Timeout,
 	}
 
 	ctx := context.Background()

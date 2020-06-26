@@ -26,6 +26,7 @@ package control
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/mitchellh/hashstructure"
@@ -325,6 +326,7 @@ type (
 	// StorageFormatReq contains the parameters for a storage format request.
 	StorageFormatReq struct {
 		unaryRequest
+		Timeout  time.Duration
 		Reformat bool
 	}
 
@@ -334,6 +336,10 @@ type (
 		HostStorage HostStorageMap
 	}
 )
+
+func (sfr *StorageFormatReq) getTimeout() time.Duration {
+	return sfr.Timeout
+}
 
 // addHostResponse is responsible for validating the given HostResponse
 // and adding it to the StorageFormatResp.
