@@ -223,6 +223,9 @@ need_nvme_poll(struct sched_cycle *cycle)
 	if (cycle->sc_ults_tot == 0)
 		return true;
 
+	if (cycle->sc_age_nvme > cycle->sc_age_nvme_bound[1])
+		return true;
+
 	dmi = dss_get_module_info();
 	D_ASSERT(dmi != NULL);
 	return bio_need_nvme_poll(dmi->dmi_nvme_ctxt);
