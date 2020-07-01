@@ -57,7 +57,7 @@ BuildRequires: python-devel python36-devel
 # that code should be rewritten to use the python libraries provided for
 # os detection
 # prefer over libpsm2-compat
-BuildRequires: libpsm_infinipath1
+#BuildRequires: libpsm_infinipath1
 # prefer over libcurl4-mini
 BuildRequires: libcurl4
 BuildRequires: distribution-release
@@ -75,7 +75,7 @@ BuildRequires: systemd-rpm-macros
 BuildRequires: libcurl4
 # have choice for libpsm_infinipath.so.1()(64bit) needed by libfabric1: libpsm2-compat libpsm_infinipath1
 # have choice for libpsm_infinipath.so.1()(64bit) needed by openmpi-libs: libpsm2-compat libpsm_infinipath1
-BuildRequires: libpsm_infinipath1
+#BuildRequires: libpsm_infinipath1
 %endif # 0%{?is_opensuse}
 %endif # (0%{?suse_version} >= 1315)
 %endif # (0%{?rhel} >= 7)
@@ -140,9 +140,10 @@ Summary: The DAOS test suite
 Requires: %{name}-client = %{version}-%{release}
 Requires: python-pathlib
 Requires: fio
-%if (0%{?suse_version} >= 1315)
-Requires: libpsm_infinipath1
-%endif
+
+#%if (0%{?suse_version} >= 1315)
+#Requires: libpsm_infinipath1
+#%endif
 
 
 %description tests
