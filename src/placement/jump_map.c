@@ -857,7 +857,8 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 	 */
 	if (fail_tgt_cnt > 0)
 		rc = obj_remap_shards(jmap, md, layout, jmop, remap_list,
-				      op_type, tgts_used, dom_used, &extend_list);
+				      op_type, tgts_used, dom_used,
+				      &extend_list);
 out:
 	if (rc) {
 		D_ERROR("jump_map_obj_layout_fill failed, rc "DF_RC"\n",
