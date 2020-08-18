@@ -267,7 +267,7 @@ jm_obj_placement_get(struct pl_jump_map *jmap, struct daos_obj_md *md,
  * Given a @jmop and target determine if there exists a spare target
  * that satisfies the layout requirements. Currently this only checks to make
  * that grp_size is greater than 1 (replicated object) and that spare targets
- * still exist within the pool map as determined by a seperate function.
+ * still exist within the pool map as determined by a separate function.
  *
  * \param[in] jmap      The currently used placement map.
  * \param[in] jmop      Struct containing layout group size and number.
@@ -857,7 +857,7 @@ get_object_layout(struct pl_jump_map *jmap, struct pl_obj_layout *layout,
 	 */
 	if (fail_tgt_cnt > 0)
 		rc = obj_remap_shards(jmap, md, layout, jmop, remap_list,
-				op_type, tgts_used, dom_used, &extend_list);
+				      op_type, tgts_used, dom_used, &extend_list);
 out:
 	if (rc) {
 		D_ERROR("jump_map_obj_layout_fill failed, rc "DF_RC"\n",
