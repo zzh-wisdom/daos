@@ -25,13 +25,17 @@ package server
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/daos-stack/daos/src/control/common/proto"
+	"github.com/daos-stack/daos/src/control/common/proto/convert"
 	ctlpb "github.com/daos-stack/daos/src/control/common/proto/ctl"
+	mgmtpb "github.com/daos-stack/daos/src/control/common/proto/mgmt"
 	"github.com/daos-stack/daos/src/control/logging"
+	"github.com/daos-stack/daos/src/control/server/storage"
 	"github.com/daos-stack/daos/src/control/server/storage/bdev"
 	"github.com/daos-stack/daos/src/control/server/storage/scm"
 )
@@ -127,14 +131,116 @@ func (c *StorageControlService) StoragePrepare(ctx context.Context, req *ctlpb.S
 	return resp, nil
 }
 
+// checkModelSerial verifies we have non-null model and serial identifiers.
+// Returns the concatenated identifier along with name of first empty field
+// and boolean indicating whether both are populated or not.
+func checkModelSerial(m string, s string) (ms, empty string, ok bool) {
+	if strings.TrimSpace(m) == "" {
+		empty = "model"
+	} else if strings.TrimSpace(s) == "" {
+		empty = "serial"
+	}
+	if empty != "" {
+		return
+	}
+	ms = m + s
+	ok = true
+
+	return
+}
+
+// updateBdevHealthSmd updates the input list of controllers with new NVMe
+// health stats and SMD metadata details.
+//
+// First map input controllers to their concatenated model+serial keys then
+// retrieve metadata and health details for each SMD device (blobstore) on
+// each local IO server instance and update details in input controller list.
+func (c *ControlService) updateBdevHealthSmd(ctx context.Context, ctrlrs storage.NvmeControllers) error {
+	c.log.Debugf("updateBdevHealthSmd(): before %v", ctrlrs)
+
+	var ctrlrMap map[string]*storage.NvmeController // ctrlr model+serial key
+
+	for _, ctrlr := range ctrlrs {
+		modelSerial, emptyField, ok := checkModelSerial(ctrlr.Model, ctrlr.Serial)
+		if !ok {
+			return errors.Errorf("input controller %s is missing %s identifier",
+				ctrlr.PciAddr, emptyField)
+		}
+
+		if _, exists := ctrlrMap[modelSerial]; exists {
+			return errors.Errorf("duplicate entries for controller %s, key %s",
+				ctrlr.PciAddr, modelSerial)
+		}
+
+		ctrlrMap[modelSerial] = ctrlr
+	}
+
+	for _, srv := range c.harness.Instances() {
+		smdDevs, lsdErr := srv.listSmdDevices(ctx, new(mgmtpb.SmdDevReq))
+		if lsdErr != nil {
+			return errors.Wrapf(lsdErr, "instance %d listSmdDevices()", srv.Index())
+		}
+
+		for _, dev := range smdDevs.Devices {
+			health, gbhErr := srv.getBioHealth(ctx, &mgmtpb.BioHealthReq{
+				DevUuid: dev.Uuid,
+			})
+			if gbhErr != nil {
+				return errors.Wrapf(lsdErr, "instance %d getBioHealth()",
+					srv.Index())
+			}
+
+			modelSerial, emptyField, ok := checkModelSerial(health.BdsModel, health.BdsSerial)
+			if !ok {
+				c.log.Debugf("skipping health stats for uuid %s, %s id empty",
+					health.DevUuid, emptyField)
+				continue
+			}
+
+			msg := fmt.Sprintf("smd info received for ctrlr model/serial %s from smd uuid %s",
+				modelSerial, dev.GetUuid())
+
+			ctrlr, exists := ctrlrMap[modelSerial]
+			if !exists {
+				c.log.Debug(msg + " didn't match any known controllers")
+				continue
+			}
+
+			c.log.Debugf("%s->%s", msg, ctrlr.PciAddr)
+
+			// multiple updates for the same key expected when
+			// more than one controller namespaces (and resident
+			// blobstores) exist, stats will be the same for each
+			if err := convert.Types(health, ctrlr.HealthStats); err != nil {
+				return errors.Wrapf(err, "converting health for controller %s %s",
+					modelSerial, ctrlr.PciAddr)
+			}
+
+			smdDev := new(storage.SmdDevice)
+			if err := convert.Types(dev, smdDev); err != nil {
+				return errors.Wrapf(err, "converting smd details for controller %s %s",
+					modelSerial, ctrlr.PciAddr)
+			}
+
+			ctrlr.SmdDevices = append(ctrlr.SmdDevices, smdDev)
+		}
+	}
+
+	c.log.Debugf("updateBdevHealthSmd(): after %v", ctrlrs)
+
+	return nil
+}
+
+// CallDrpc list devices and then issue bio health query for each device, perform on each instance
 // StorageScan discovers non-volatile storage hardware on node.
-func (c *StorageControlService) StorageScan(ctx context.Context, req *ctlpb.StorageScanReq) (*ctlpb.StorageScanResp, error) {
+func (c *ControlService) StorageScan(ctx context.Context, req *ctlpb.StorageScanReq) (*ctlpb.StorageScanResp, error) {
 	c.log.Debug("received StorageScan RPC")
 
 	msg := "Storage Scan "
 	resp := new(ctlpb.StorageScanResp)
 
-	bdevReq := bdev.ScanRequest{Rescan: true}
+	// cache controller details by default
+	bdevReq := bdev.ScanRequest{Rescan: false}
 	if req.ConfigDevicesOnly {
 		for _, storageCfg := range c.instanceStorage {
 			bdevReq.DeviceList = append(bdevReq.DeviceList,
@@ -151,9 +257,15 @@ func (c *StorageControlService) StorageScan(ctx context.Context, req *ctlpb.Stor
 				scanErr.Error(), "", msg+"NVMe"),
 		}
 	} else {
+		if req.ConfigDevicesOnly {
+			// return up-to-date health stats and smd info
+			if err := c.updateBdevHealthSmd(ctx, bsr.Controllers); err != nil {
+				return nil, errors.Wrap(err, "updating bdev health and smd info")
+			}
+		}
 		pbCtrlrs := make(proto.NvmeControllers, 0, len(bsr.Controllers))
 		if err := pbCtrlrs.FromNative(bsr.Controllers); err != nil {
-			return nil, errors.Wrapf(err, "failed to cleanly convert %#v to protobuf", bsr.Controllers)
+			return nil, errors.Wrapf(err, "convert %#v to protobuf format", bsr.Controllers)
 		}
 		resp.Nvme = &ctlpb.ScanNvmeResp{
 			State:  newState(c.log, ctlpb.ResponseStatus_CTL_SUCCESS, "", "", msg+"NVMe"),

@@ -114,6 +114,29 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 				},
 			},
 		},
+		"scan with bdev when io servers are running": {
+			bmbc: &bdev.MockBackendConfig{
+				ScanRes: &bdev.ScanResponse{
+					Controllers: storage.NvmeControllers{
+						storage.MockNvmeController(),
+					},
+				},
+			},
+			smbc: &scm.MockBackendConfig{
+				DiscoverRes:     storage.ScmModules{storage.MockScmModule()},
+				GetNamespaceRes: storage.ScmNamespaces{storage.MockScmNamespace()},
+			},
+			expResp: StorageScanResp{
+				Nvme: &ScanNvmeResp{
+					// Ctrlrs: proto.NvmeControllers{proto.MockNvmeController()},
+					State: new(ResponseState),
+				},
+				Scm: &ScanScmResp{
+					Namespaces: proto.ScmNamespaces{proto.MockScmNamespace()},
+					State:      new(ResponseState),
+				},
+			},
+		},
 		"successful scan no scm namespaces": {
 			bmbc: &bdev.MockBackendConfig{
 				ScanRes: &bdev.ScanResponse{

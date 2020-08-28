@@ -64,7 +64,7 @@ func PrintNvmeHealthMap(hsm control.HostStorageMap, out io.Writer, opts ...contr
 	return w.Err
 }
 
-func printSmdDevice(dev *control.SmdDevice, out io.Writer, opts ...control.PrintConfigOption) error {
+func printSmdDevice(dev *storage.SmdDevice, out io.Writer, opts ...control.PrintConfigOption) error {
 	_, err := fmt.Fprintf(out, "UUID:%s Targets:%+v Rank:%d State:%s\n",
 		dev.UUID, dev.TargetIDs, dev.Rank, dev.State)
 	return err
