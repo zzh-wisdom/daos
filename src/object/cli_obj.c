@@ -4190,6 +4190,13 @@ obj_list_common(tse_task_t *task, int opc, daos_obj_list_t *args)
 			int leader;
 
 			leader = obj_grp_leader_get(obj, shard, map_ver);
+			if (leader < 0) {
+				D_ERROR(DF_OID" no leader avaible: "DF_RC".\n",
+					DP_OID(obj->cob_md.omd_id),
+					DP_RC(leader));
+				D_GOTO(out_task, rc = leader);
+			}
+
 			p_shard = obj_get_shard(obj, leader);
 			if (p_shard->po_rebuilding ||
 			    p_shard->po_target == -1) {
