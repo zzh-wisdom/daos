@@ -40,6 +40,7 @@ import (
 
 	"github.com/daos-stack/daos/src/control/common"
 	"github.com/daos-stack/daos/src/control/common/proto"
+	"github.com/daos-stack/daos/src/control/common/proto/convert"
 	. "github.com/daos-stack/daos/src/control/common/proto/ctl"
 	mgmtpb "github.com/daos-stack/daos/src/control/common/proto/mgmt"
 	"github.com/daos-stack/daos/src/control/drpc"
@@ -86,9 +87,17 @@ func newMockStorageConfig(
 }
 
 func TestServer_CtlSvc_StorageScan(t *testing.T) {
-	mockHealth := proto.MockNvmeControllerHealth(2)
-	mockCtrlr := proto.MockNvmeController(1)
-	mockCtrlr.Healthstats = mockHealth
+	mockHealthPB := proto.MockNvmeControllerHealth(2)
+	mockCtrlr := storage.MockNvmeController(1)
+	mockCtrlrPB := proto.MockNvmeController(1)
+	mockCtrlrPB.Serial = mockCtrlr.Serial // match up because randomly generated
+	mockCtrlrPB.Healthstats = mockHealthPB
+	mockBioHealthResp := new(mgmtpb.BioHealthResp)
+	if err := convert.Types(mockHealthPB, mockBioHealthResp); err != nil {
+		t.Fatal(err)
+	}
+	mockBioHealthResp.Model = mockCtrlrPB.Model
+	mockBioHealthResp.Serial = mockCtrlrPB.Serial
 
 	for name, tc := range map[string]struct {
 		req            *StorageScanReq
@@ -97,7 +106,7 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 		junkResp       bool
 		drpcResps      map[int][]*mockDrpcResponse
 		harnessStopped bool
-		ioStopped      bool
+		ioStarted      bool
 		expSetupErr    error
 		expErr         error
 		expResp        StorageScanResp
@@ -158,7 +167,7 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 			expResp: StorageScanResp{
 				Nvme: &ScanNvmeResp{
 					State: &ResponseState{
-						Error:  "spdk scan failed",
+						Error:  "NvmeScan(): spdk scan failed",
 						Status: ResponseStatus_CTL_ERR_NVME,
 					},
 				},
@@ -184,7 +193,7 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 				},
 				Scm: &ScanScmResp{
 					State: &ResponseState{
-						Error:  "scm discover failed",
+						Error:  "ScmScan(): scm discover failed",
 						Status: ResponseStatus_CTL_ERR_SCM,
 					},
 				},
@@ -200,13 +209,13 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 			expResp: StorageScanResp{
 				Nvme: &ScanNvmeResp{
 					State: &ResponseState{
-						Error:  "spdk scan failed",
+						Error:  "NvmeScan(): spdk scan failed",
 						Status: ResponseStatus_CTL_ERR_NVME,
 					},
 				},
 				Scm: &ScanScmResp{
 					State: &ResponseState{
-						Error:  "scm discover failed",
+						Error:  "ScmScan(): scm discover failed",
 						Status: ResponseStatus_CTL_ERR_SCM,
 					},
 				},
@@ -217,15 +226,13 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 			bmbc: &bdev.MockBackendConfig{
 				ScanRes: &bdev.ScanResponse{
 					Controllers: storage.NvmeControllers{
-						storage.MockNvmeController(),
-						storage.MockNvmeController(9),
+						storage.MockNvmeController(1),
 					},
 				},
 			},
-			ioStopped: true,
 			expResp: StorageScanResp{
 				Nvme: &ScanNvmeResp{
-					Ctrlrs: proto.NvmeControllers{mockCtrlr},
+					Ctrlrs: proto.NvmeControllers{proto.MockNvmeController(1)},
 					State:  new(ResponseState),
 				},
 				Scm: &ScanScmResp{
@@ -238,10 +245,11 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 			bmbc: &bdev.MockBackendConfig{
 				ScanRes: &bdev.ScanResponse{
 					Controllers: storage.NvmeControllers{
-						storage.MockNvmeController(),
+						mockCtrlr,
 					},
 				},
 			},
+			ioStarted: true,
 			drpcResps: map[int][]*mockDrpcResponse{
 				0: {
 					{
@@ -253,20 +261,14 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 							},
 						},
 					},
-				},
-				1: {
 					{
-						Message: &mgmtpb.BioHealthResp{
-							DevUuid:      common.MockUUID(1),
-							Temperature:  9999,
-							CtrlBusyTime: 9999,
-						},
+						Message: mockBioHealthResp,
 					},
 				},
 			},
 			expResp: StorageScanResp{
 				Nvme: &ScanNvmeResp{
-					Ctrlrs: proto.NvmeControllers{mockCtrlr},
+					Ctrlrs: proto.NvmeControllers{mockCtrlrPB},
 					State:  new(ResponseState),
 				},
 				Scm: &ScanScmResp{
@@ -302,7 +304,7 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 				}
 				srv.setDrpcClient(newMockDrpcClient(cfg))
 			}
-			if tc.ioStopped {
+			if !tc.ioStarted {
 				for _, srv := range svc.harness.instances {
 					srv.ready.SetFalse()
 				}
@@ -310,8 +312,14 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 
 			// test for both empty and default config cases
 			for configIdx, config := range []*Configuration{defaultWithNvme, emptyCfg} {
+				if configIdx == 1 && tc.req.ConfigDevicesOnly {
+					continue
+				}
+
 				cs := mockControlService(t, log, config, tc.bmbc, tc.smbc, nil)
-				cs.harness = svc.harness // replace harness with mock
+				if configIdx == 0 {
+					cs.harness = svc.harness // replace harness with mock
+				}
 
 				// runs discovery for nvme & scm
 				err := cs.Setup()
@@ -330,7 +338,6 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 
 				// cs.StorageScan will never return err
 				resp, err := cs.StorageScan(context.TODO(), tc.req)
-				t.Logf("scan returned error %v", err)
 				if err != nil {
 					t.Fatal(err)
 				}
