@@ -92,6 +92,17 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 	mockCtrlrPB := proto.MockNvmeController(1)
 	mockCtrlrPB.Serial = mockCtrlr.Serial // match up because randomly generated
 	mockCtrlrPB.Healthstats = mockHealthPB
+	mockCtrlrPB.Smddevices = []*NvmeController_SmdDevice{
+		{
+			Uuid:   common.MockUUID(1),
+			TgtIds: []int32{1, 2, 3, 4},
+			State:  "NORMAL",
+		},
+	}
+	mockSmdDevRespDevice := new(mgmtpb.SmdDevResp_Device)
+	if err := convert.Types(mockCtrlrPB.Smddevices[0], mockSmdDevRespDevice); err != nil {
+		t.Fatal(err)
+	}
 	mockBioHealthResp := new(mgmtpb.BioHealthResp)
 	if err := convert.Types(mockHealthPB, mockBioHealthResp); err != nil {
 		t.Fatal(err)
@@ -255,9 +266,7 @@ func TestServer_CtlSvc_StorageScan(t *testing.T) {
 					{
 						Message: &mgmtpb.SmdDevResp{
 							Devices: []*mgmtpb.SmdDevResp_Device{
-								{
-									Uuid: common.MockUUID(1),
-								},
+								mockSmdDevRespDevice,
 							},
 						},
 					},
