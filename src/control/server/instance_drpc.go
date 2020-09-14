@@ -159,6 +159,7 @@ func (srv *IOServerInstance) TryDrpc(ctx context.Context, method drpc.Method) *s
 }
 
 func (srv *IOServerInstance) getBioHealth(ctx context.Context, req *mgmtpb.BioHealthReq) (*mgmtpb.BioHealthResp, error) {
+	srv.log.Debug("getBioHealth enter")
 	dresp, err := srv.CallDrpc(drpc.MethodBioHealth, req)
 	if err != nil {
 		return nil, err

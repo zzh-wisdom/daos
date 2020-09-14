@@ -149,165 +149,230 @@ func checkModelSerial(m string, s string) (ms, empty string, ok bool) {
 	return
 }
 
-// updateBdevHealthSmd updates the input list of controllers with new NVMe
+// updateBdevOverDrpc updates the input list of controllers with new NVMe
 // health stats and SMD metadata details.
 //
 // First map input controllers to their concatenated model+serial keys then
 // retrieve metadata and health details for each SMD device (blobstore) on
 // each local IO server instance and update details in input controller list.
-func (c *ControlService) updateBdevHealthSmd(ctx context.Context, ctrlrs storage.NvmeControllers) error {
-	c.log.Debugf("updateBdevHealthSmd(): before %v", ctrlrs)
+func (srv *IOServerInstance) updateBdevOverDrpc(ctx context.Context, ctrlrs storage.NvmeControllers) error {
 
-	var ctrlrMap map[string]*storage.NvmeController // ctrlr model+serial key
+	smdDevs, err := srv.listSmdDevices(ctx, new(mgmtpb.SmdDevReq))
+	if err != nil {
+		return errors.Wrapf(err, "instance %d listSmdDevices()", srv.Index())
+	}
+
+	for _, dev := range smdDevs.Devices {
+		c.log.Debugf("smd dev: %s", dev.GetUuid())
+
+		health, err := srv.getBioHealth(ctx, &mgmtpb.BioHealthReq{
+			DevUuid: dev.Uuid,
+		})
+		if err != nil {
+			c.log.Debug("getBioHealth failed")
+			return errors.Wrapf(err, "instance %d getBioHealth()",
+				srv.Index())
+		}
+
+		c.log.Debugf("health response: %v", health)
+		modelSerial, emptyField, ok := checkModelSerial(health.Model, health.Serial)
+		if !ok {
+			c.log.Debugf("skipping health stats for uuid %s, %s id empty",
+				health.DevUuid, emptyField)
+			continue
+		}
+
+		msg := fmt.Sprintf("smd info received for ctrlr model/serial %s from smd uuid %s",
+			modelSerial, dev.GetUuid())
+
+		ctrlr, exists := ctrlrMap[modelSerial]
+		if !exists {
+			c.log.Debug(msg + " didn't match any known controllers")
+			continue
+		}
+
+		c.log.Debugf("%s->%s", msg, ctrlr.PciAddr)
+
+		// multiple updates for the same key expected when
+		// more than one controller namespaces (and resident
+		// blobstores) exist, stats will be the same for each
+		if err := convert.Types(health, ctrlr.HealthStats); err != nil {
+			return errors.Wrapf(err, "converting health for controller %s %s",
+				modelSerial, ctrlr.PciAddr)
+		}
+
+		smdDev := new(storage.SmdDevice)
+		if err := convert.Types(dev, smdDev); err != nil {
+			return errors.Wrapf(err, "converting smd details for controller %s %s",
+				modelSerial, ctrlr.PciAddr)
+		}
+
+		ctrlr.SmdDevices = append(ctrlr.SmdDevices, smdDev)
+	}
+
+	return nil
+}
+
+func mapCtrlrsByModelSerial(ctrlrs storage.NvmeControllers) (map[string]*storage.NvmeController, error) {
+	ctrlrMap := make(map[string]*storage.NvmeController) // ctrlr model+serial key
 
 	for _, ctrlr := range ctrlrs {
 		modelSerial, emptyField, ok := checkModelSerial(ctrlr.Model, ctrlr.Serial)
 		if !ok {
-			return errors.Errorf("input controller %s is missing %s identifier",
+			return nil, errors.Errorf("input controller %s is missing %s identifier",
 				ctrlr.PciAddr, emptyField)
 		}
 
 		if _, exists := ctrlrMap[modelSerial]; exists {
-			return errors.Errorf("duplicate entries for controller %s, key %s",
+			return nil, errors.Errorf("duplicate entries for controller %s, key %s",
 				ctrlr.PciAddr, modelSerial)
 		}
 
 		ctrlrMap[modelSerial] = ctrlr
 	}
 
-	for _, srv := range c.harness.Instances() {
-		smdDevs, lsdErr := srv.listSmdDevices(ctx, new(mgmtpb.SmdDevReq))
-		if lsdErr != nil {
-			return errors.Wrapf(lsdErr, "instance %d listSmdDevices()", srv.Index())
+	return ctrlrMap, nil
+}
+
+func (c *ControlService) scanInstanceBdevs(ctx context.Context, configDevicesOnly bool) (storage.NvmeControllers, error) {
+	// use cached controller details by default
+	bdevReq := bdev.ScanRequest{Rescan: false}
+
+	if !configDevicesOnly {
+		bsr, err := c.NvmeScan(bdevReq)
+		if err != nil {
+			return nil, errors.Wrap(err, "NvmeScan()")
 		}
 
-		for _, dev := range smdDevs.Devices {
-			health, gbhErr := srv.getBioHealth(ctx, &mgmtpb.BioHealthReq{
-				DevUuid: dev.Uuid,
-			})
-			if gbhErr != nil {
-				return errors.Wrapf(lsdErr, "instance %d getBioHealth()",
-					srv.Index())
-			}
-
-			modelSerial, emptyField, ok := checkModelSerial(health.BdsModel, health.BdsSerial)
-			if !ok {
-				c.log.Debugf("skipping health stats for uuid %s, %s id empty",
-					health.DevUuid, emptyField)
-				continue
-			}
-
-			msg := fmt.Sprintf("smd info received for ctrlr model/serial %s from smd uuid %s",
-				modelSerial, dev.GetUuid())
-
-			ctrlr, exists := ctrlrMap[modelSerial]
-			if !exists {
-				c.log.Debug(msg + " didn't match any known controllers")
-				continue
-			}
-
-			c.log.Debugf("%s->%s", msg, ctrlr.PciAddr)
-
-			// multiple updates for the same key expected when
-			// more than one controller namespaces (and resident
-			// blobstores) exist, stats will be the same for each
-			if err := convert.Types(health, ctrlr.HealthStats); err != nil {
-				return errors.Wrapf(err, "converting health for controller %s %s",
-					modelSerial, ctrlr.PciAddr)
-			}
-
-			smdDev := new(storage.SmdDevice)
-			if err := convert.Types(dev, smdDev); err != nil {
-				return errors.Wrapf(err, "converting smd details for controller %s %s",
-					modelSerial, ctrlr.PciAddr)
-			}
-
-			ctrlr.SmdDevices = append(ctrlr.SmdDevices, smdDev)
-		}
+		return bsr.Controllers, nil
 	}
 
-	c.log.Debugf("updateBdevHealthSmd(): after %v", ctrlrs)
+	var allCtrlrs storage.NvmeControllers
+	instances := c.harness.Instances()
+	// only retrieve results for devices listed in server config
+	for _, srv := range instances {
+		instanceBdevs := c.instanceStorage[srv.Index()].Bdev.GetNvmeDevs()
+		bdevReq.DeviceList = append(bdevReq.DeviceList, instanceBdevs...)
+		c.log.Debugf("instance %d storage scan: only show bdev devices in config %v",
+			srv.Index(), instanceBdevs)
+
+		// rescan through control-plane to get up-to-date stats if io
+		// servers are not active (and therefore have not claimed the
+		// assigned devices)
+		if !srv.isReady() {
+			bdevReq.Rescan = true
+		}
+
+		bsr, err := c.NvmeScan(bdevReq)
+		if err != nil {
+			return nil, errors.Wrap(err, "NvmeScan()")
+		}
+
+		if bdevReq.Rescan {
+			allCtrlrs = append(allCtrlrs, bsr.Controllers...)
+			continue
+		}
+
+		ctrlrMap, err := mapCtrlrsByModelSerial(bsr.Controllers)
+		if err != nil {
+			return nil, errors.Wrap(err, "mapCtrlrsByModelSerial()")
+		}
+
+		// if io servers are active and have claimed the assigned devices,
+		// query over drpc to update controller details with current health
+		// stats and smd info
+		if err := srv.nvmeUpdateOverDrpc(ctx, ctrlrMap); err != nil {
+			return nil, errors.Wrap(err, "updating bdev health and smd info")
+		}
+
+		allCtrlrs = append(allCtrlrs, bsr.Controllers...)
+	}
+
+	return allCtrlrs, nil
+}
+
+func (c *ControlService) scanBdevs(ctx context.Context, configDevicesOnly bool, resp *ctlpb.ScanNvmeResp) error {
+	state := newState(c.log, ctlpb.ResponseStatus_CTL_SUCCESS, "", "",
+		"Scan NVMe Storage")
+
+	ctrlrs, err := c.scanInstanceBdevs(ctx, configDevicesOnly)
+	if err != nil {
+		state.Status = ctlpb.ResponseStatus_CTL_ERR_NVME
+		state.Error = err.Error()
+		resp.State = state
+
+		return nil
+	}
+
+	pbCtrlrs := make(proto.NvmeControllers, 0, len(ctrlrs))
+	if err := pbCtrlrs.FromNative(ctrlrs); err != nil {
+		return errors.Wrapf(err, "convert %#v to protobuf format", ctrlrs)
+	}
+
+	resp.State = state
+	resp.Ctrlrs = pbCtrlrs
 
 	return nil
 }
 
-// CallDrpc list devices and then issue bio health query for each device, perform on each instance
+func (c *ControlService) scanInstanceScm(ctx context.Context) (storage.ScmNamespaces, storage.ScmModules, error) {
+	// rescan scm storage details by default
+	scmReq := scm.ScanRequest{Rescan: true}
+	ssr, err := c.ScmScan(scmReq)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return ssr.Namespaces, ssr.Modules, nil
+}
+
+func (c *ControlService) scanScm(ctx context.Context, resp *ctlpb.ScanScmResp) error {
+	state := newState(c.log, ctlpb.ResponseStatus_CTL_SUCCESS, "", "",
+		"Scan SCM Storage")
+
+	namespaces, modules, err := c.scanInstanceScm(ctx)
+	if err != nil {
+		state.Status = ctlpb.ResponseStatus_CTL_ERR_SCM
+		state.Error = err.Error()
+		resp.State = state
+
+		return nil
+	}
+
+	if len(namespaces) > 0 {
+		resp.Scm.Namespaces = make(proto.ScmNamespaces, 0, len(namespaces))
+		err := (*proto.ScmNamespaces)(&resp.Scm.Namespaces).FromNative(namespaces)
+		if err != nil {
+			return errors.Wrapf(err, "convert %#v to protobuf format", namespaces)
+		}
+		resp.State = state
+
+		return nil
+	}
+
+	resp.Scm.Modules = make(proto.ScmModules, 0, len(modules))
+	if err := (*proto.ScmModules)(&resp.Scm.Modules).FromNative(modules); err != nil {
+		return errors.Wrapf(err, "convert %#v to protobuf format", modules)
+	}
+	resp.State = state
+
+	return nil
+}
+
 // StorageScan discovers non-volatile storage hardware on node.
 func (c *ControlService) StorageScan(ctx context.Context, req *ctlpb.StorageScanReq) (*ctlpb.StorageScanResp, error) {
 	c.log.Debug("received StorageScan RPC")
-
-	msg := "Storage Scan "
 	resp := new(ctlpb.StorageScanResp)
+	resp.Nvme = new(ctlpb.ScanNvmeResp)
+	resp.Scm = new(ctlpb.ScanScmResp)
 
-	// cache controller details by default
-	bdevReq := bdev.ScanRequest{Rescan: false}
-	if req.ConfigDevicesOnly {
-		for _, storageCfg := range c.instanceStorage {
-			bdevReq.DeviceList = append(bdevReq.DeviceList,
-				storageCfg.Bdev.GetNvmeDevs()...)
-		}
-		c.log.Debugf("%s only show bdev devices specified in config %v",
-			msg, bdevReq.DeviceList)
+	if err := c.scanBdevs(ctx, req.ConfigDevicesOnly, resp.Nvme); err != nil {
+		return nil, err
 	}
 
-	bsr, scanErr := c.NvmeScan(bdevReq)
-	if scanErr != nil {
-		resp.Nvme = &ctlpb.ScanNvmeResp{
-			State: newState(c.log, ctlpb.ResponseStatus_CTL_ERR_NVME,
-				scanErr.Error(), "", msg+"NVMe"),
-		}
-	} else {
-		if req.ConfigDevicesOnly {
-			// return up-to-date health stats and smd info
-			if err := c.updateBdevHealthSmd(ctx, bsr.Controllers); err != nil {
-				return nil, errors.Wrap(err, "updating bdev health and smd info")
-			}
-		}
-		pbCtrlrs := make(proto.NvmeControllers, 0, len(bsr.Controllers))
-		if err := pbCtrlrs.FromNative(bsr.Controllers); err != nil {
-			return nil, errors.Wrapf(err, "convert %#v to protobuf format", bsr.Controllers)
-		}
-		resp.Nvme = &ctlpb.ScanNvmeResp{
-			State:  newState(c.log, ctlpb.ResponseStatus_CTL_SUCCESS, "", "", msg+"NVMe"),
-			Ctrlrs: pbCtrlrs,
-		}
-	}
-
-	scmReq := scm.ScanRequest{Rescan: true}
-	if req.ConfigDevicesOnly {
-		for _, storageCfg := range c.instanceStorage {
-			scmReq.DeviceList = append(scmReq.DeviceList,
-				storageCfg.SCM.DeviceList...)
-		}
-		c.log.Debugf("%s only show scm devices specified in config %v",
-			msg, scmReq.DeviceList)
-	}
-
-	ssr, err := c.ScmScan(scmReq)
-	if err != nil {
-		resp.Scm = &ctlpb.ScanScmResp{
-			State: newState(c.log, ctlpb.ResponseStatus_CTL_ERR_SCM, err.Error(), "", msg+"SCM"),
-		}
-	} else {
-		msg += fmt.Sprintf("SCM (%s)", ssr.State)
-		resp.Scm = &ctlpb.ScanScmResp{
-			State: newState(c.log, ctlpb.ResponseStatus_CTL_SUCCESS, "", "", msg),
-		}
-		if len(ssr.Namespaces) > 0 {
-			resp.Scm.Namespaces = make(proto.ScmNamespaces, 0, len(ssr.Namespaces))
-			err := (*proto.ScmNamespaces)(&resp.Scm.Namespaces).FromNative(ssr.Namespaces)
-			if err != nil {
-				resp.Scm.State = newState(c.log, ctlpb.ResponseStatus_CTL_ERR_SCM,
-					err.Error(), "", msg+"SCM")
-			}
-		} else {
-			resp.Scm.Modules = make(proto.ScmModules, 0, len(ssr.Modules))
-			err := (*proto.ScmModules)(&resp.Scm.Modules).FromNative(ssr.Modules)
-			if err != nil {
-				resp.Scm.State = newState(c.log, ctlpb.ResponseStatus_CTL_ERR_SCM,
-					err.Error(), "", msg+"SCM")
-			}
-		}
+	resp.Scm = new(ctlpb.ScanScmResp)
+	if err := c.scanPmems(ctx, req.ConfigDevicesOnly, resp.Scm); err != nil {
+		return nil, err
 	}
 
 	c.log.Debug("responding to StorageScan RPC")
