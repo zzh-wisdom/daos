@@ -80,7 +80,7 @@ func (srv *IOServerInstance) start(ctx context.Context, errChan chan<- error) er
 // waitReady awaits ready signal from I/O server before starting
 // management service on MS replicas immediately so other instances can join.
 // I/O server modules are then loaded.
-func (srv *IOServerInstance) waitReady(ctx context.Context, errChan chan error) error {
+func (srv *IOServerInstance) waitReady(ctx context.Context, membership *system.Membership, errChan chan error) error {
 	srv.log.Debugf("instance %d: awaiting %s init", srv.Index(), DataPlaneName)
 
 	select {
@@ -90,7 +90,7 @@ func (srv *IOServerInstance) waitReady(ctx context.Context, errChan chan error) 
 		// TODO: Restart failed instances on unexpected exit.
 		return errors.Wrapf(err, "instance %d exited prematurely", srv.Index())
 	case ready := <-srv.awaitDrpcReady():
-		if err := srv.finishStartup(ctx, ready); err != nil {
+		if err := srv.finishStartup(ctx, membership, ready); err != nil {
 			return err
 		}
 		return nil
@@ -102,7 +102,7 @@ func (srv *IOServerInstance) waitReady(ctx context.Context, errChan chan error) 
 // modules.
 //
 // Instance ready state is set to indicate that all setup is complete.
-func (srv *IOServerInstance) finishStartup(ctx context.Context, ready *srvpb.NotifyReadyReq) error {
+func (srv *IOServerInstance) finishStartup(ctx context.Context, membership *system.Membership, ready *srvpb.NotifyReadyReq) error {
 	if err := srv.setRank(ctx, ready); err != nil {
 		return err
 	}
@@ -113,6 +113,10 @@ func (srv *IOServerInstance) finishStartup(ctx context.Context, ready *srvpb.Not
 	if srv.isMSReplica() {
 		if err := srv.startMgmtSvc(); err != nil {
 			return errors.Wrap(err, "failed to start management service")
+		}
+		// MS bootstrap will not join so register manually
+		if err := srv.registerMember(membership); err != nil {
+			return err
 		}
 	}
 
@@ -149,15 +153,9 @@ func (srv *IOServerInstance) run(ctx context.Context, membership *system.Members
 	if err = srv.start(ctx, errChan); err != nil {
 		return
 	}
-	if srv.isMSReplica() {
-		// MS bootstrap will not join so register manually
-		if err := srv.registerMember(membership); err != nil {
-			return err
-		}
-	}
 	srv.waitDrpc.SetTrue()
 
-	if err = srv.waitReady(ctx, errChan); err != nil {
+	if err = srv.waitReady(ctx, membership, errChan); err != nil {
 		return
 	}
 

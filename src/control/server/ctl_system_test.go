@@ -58,26 +58,36 @@ func TestServer_CtlSvc_rpcFanout(t *testing.T) {
 		"nil method in request": {
 			expErrMsg: "fanout request with nil method",
 		},
-		"hosts and ranks both specified": {
-			fanReq: fanoutRequest{
-				Method: control.PingRanks, Hosts: "foo-[0-99]", Ranks: "0-99",
-			},
-			expErrMsg: "ranklist and hostlist cannot both be set in request",
-		},
 		"nil membership": {
 			fanReq:        fanoutRequest{Method: control.PingRanks},
 			nilMembership: true,
 			expErrMsg:     "nil system membership",
 		},
 		"empty membership": {
-			fanReq: fanoutRequest{Method: control.PingRanks},
+			fanReq:    fanoutRequest{Method: control.PingRanks},
+			expErrMsg: "empty system membership",
+		},
+		"hosts and ranks both specified": {
+			fanReq: fanoutRequest{
+				Method: control.PingRanks, Hosts: "foo-[0-99]", Ranks: "0-99",
+			},
+			members: system.Members{
+				system.NewMember(0, "", common.MockHostAddr(1), system.MemberStateJoined),
+			},
+			expErrMsg: "ranklist and hostlist cannot both be set in request",
 		},
 		"bad hosts in request": {
-			fanReq:    fanoutRequest{Method: control.PingRanks, Hosts: "123"},
+			fanReq: fanoutRequest{Method: control.PingRanks, Hosts: "123"},
+			members: system.Members{
+				system.NewMember(0, "", common.MockHostAddr(1), system.MemberStateJoined),
+			},
 			expErrMsg: "invalid hostname \"123\"",
 		},
 		"bad ranks in request": {
-			fanReq:    fanoutRequest{Method: control.PingRanks, Ranks: "foo"},
+			fanReq: fanoutRequest{Method: control.PingRanks, Ranks: "foo"},
+			members: system.Members{
+				system.NewMember(0, "", common.MockHostAddr(1), system.MemberStateJoined),
+			},
 			expErrMsg: "unexpected alphabetic character(s)",
 		},
 		"unfiltered ranks": {
