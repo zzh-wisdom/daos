@@ -541,7 +541,6 @@ retry:
 			char		*new_buf;
 			uint64_t	new_size = iov.iov_len;
 
-			D_ASSERT(new_size > STACK_HDL_BUF_SIZE);
 			D_ALLOC(new_buf, new_size);
 			if (new_buf == NULL)
 				D_GOTO(out, rc = -DER_NOMEM);

@@ -955,7 +955,14 @@ ds_pool_iv_conn_hdl_fetch(struct ds_pool *pool, uuid_t key_uuid,
 	sgl.sg_nr = 1;
 	sgl.sg_nr_out = 0;
 	sgl.sg_iovs = conn_iov;
+	if (conn_iov != NULL && conn_iov->iov_buf) {
+		struct pool_iv_conns *conns;
 
+		conns = conn_iov->iov_buf;
+		conns->pic_size = 0;
+		conns->pic_buf_size = conn_iov->iov_buf_len -
+				      sizeof(*conns);
+	}
 	memset(&key, 0, sizeof(key));
 	key.class_id = IV_POOL_CONN;
 	pool_key = key2priv(&key);
