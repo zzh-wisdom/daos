@@ -38,6 +38,7 @@
 #include <daos_mgmt.h>
 #include "rpc.h"
 #include "rebuild_internal.h"
+#include "math.h"
 
 #define RBLD_CHECK_INTV	 (2 * NSEC_PER_SEC)	/* seconds interval to check*/
 struct rebuild_global	rebuild_gst;
@@ -1381,15 +1382,50 @@ rebuild_print_list_update(const char *const str, const uuid_t uuid,
 			  daos_rebuild_opc_t rebuild_op,
 			  struct pool_target_id_list *tgts) {
 	int i;
+	char *buf;
+	size_t offset;
+	size_t buf_size;
 
-	D_PRINT("%s (pool="DF_UUID" ver=%u, op=%s) tgts=", str, DP_UUID(uuid),
-		map_ver, RB_OP_STR(rebuild_op));
+	/*
+	 * This code assembles the targets list into a string buffer and
+	 * prints it all in one shot to avoid weird line wrapping which happens
+	 * randomly when multiple calls to D_PRINT happen without newlines
+	 */
+
+	/* Figure out how much space is needed to print all the targets */
+	buf_size = 1; /* Starting at 1 for null terminator */
 	for (i = 0; i < tgts->pti_number; i++) {
 		if (i > 0)
-			D_PRINT(",");
-		D_PRINT("%u", tgts->pti_ids[i].pti_id);
+			buf_size++; /* For "," */
+		/* Compute how long this number would be printed to base 10 */
+		if (tgts->pti_ids[i].pti_id == 0)
+			buf_size += 1;
+		else
+			buf_size += floor(log10(tgts->pti_ids[i].pti_id)) + 1;
 	}
-	D_PRINT("\n");
+
+	/* Allocate a buffer to print to */
+	D_ALLOC_ARRAY(buf, buf_size);
+	if (buf == NULL)
+		/* Nothing to recover here... */
+		return;
+
+	/* Make doubly sure the buffer to print is null terminators */
+	memset(buf, '\0', buf_size);
+
+	/* Re-iterate the list, printing data to the string buffer */
+	offset = 0;
+	for (i = 0; i < tgts->pti_number; i++) {
+		D_ASSERT(offset < buf_size);
+		if (i > 0)
+			offset += snprintf(buf + offset, buf_size - offset,
+					   ",");
+		offset += snprintf(buf + offset, buf_size - offset, "%u",
+				   tgts->pti_ids[i].pti_id);
+	}
+
+	D_PRINT("%s (pool="DF_UUID" ver=%u, op=%s) tgts=%s\n", str, DP_UUID(uuid),
+		map_ver, RB_OP_STR(rebuild_op), buf);
 }
 
 /**
@@ -1405,6 +1441,8 @@ ds_rebuild_schedule(const uuid_t uuid, uint32_t map_ver,
 	int			rc;
 
 	if (rebuild_op == RB_OP_DEMO_ENUMERATE) {
+		if (rebuild_gst.rg_rebuild_running)
+			return 0;
 		d_list_for_each_entry(task, &rebuild_gst.rg_queue_list,
 				      dst_list) {
 			if (uuid_compare(task->dst_pool_uuid, uuid) == 0) {

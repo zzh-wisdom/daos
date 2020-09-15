@@ -647,7 +647,7 @@ rebuild_scan_leader(void *data)
 		ABT_thread_yield();
 
 	if (rpt->rt_rebuild_op == RB_OP_DEMO_ENUMERATE) {
-		rc = ABT_mutex_create(&rpt->rt_lock);
+		rc = ABT_mutex_create(&rpt->demo_lock);
 		if (rc != ABT_SUCCESS) {
 			D_PRINT("DEMO: ABT mutex create failed: %d\n", rc);
 			return;
@@ -667,7 +667,7 @@ rebuild_scan_leader(void *data)
 	if (rpt->rt_rebuild_op == RB_OP_DEMO_ENUMERATE && rpt->demo_count > 0) {
 		D_PRINT("\n\nObject shards on this rank:%s\nTotal Shards:%d\n\n", rpt->demo, rpt->demo_count);
 		D_FREE(rpt->demo);
-		ABT_mutex_free(&rpt->rt_lock);
+		ABT_mutex_free(&rpt->demo_lock);
 	}
 
 	D_DEBUG(DB_REBUILD, "rebuild scan collective "DF_UUID" done.\n",
