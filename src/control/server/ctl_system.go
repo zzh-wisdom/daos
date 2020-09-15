@@ -69,6 +69,11 @@ func (svc *ControlService) resolveRanks(hosts, ranks string) (hitRS, missRS *sys
 		return
 	}
 
+	if len(svc.membership.Members(nil)) == 0 {
+		err = errors.New("empty system membership")
+		return
+	}
+
 	switch {
 	case hasHosts && hasRanks:
 		err = errors.New("ranklist and hostlist cannot both be set in request")
