@@ -212,11 +212,7 @@ type storageFormatCmd struct {
 func (cmd *storageFormatCmd) shouldReformatSystem(ctx context.Context) (bool, error) {
 	if cmd.Reformat {
 		resp, err := control.SystemQuery(ctx, cmd.ctlInvoker, &control.SystemQueryReq{})
-		if err != nil {
-			return false, errors.Wrap(err, "System-Query command failed")
-		}
-
-		if len(resp.Members) == 0 {
+		if err != nil || len(resp.Members) == 0 {
 			cmd.log.Debug("no system members, reformat host list")
 
 			return false, nil
