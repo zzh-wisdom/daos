@@ -1753,9 +1753,9 @@ vos_dtx_post_handle(struct vos_container *cont, struct vos_dtx_act_ent **daes,
 		d_iov_set(&kiov, &DAE_XID(daes[i]), sizeof(DAE_XID(daes[i])));
 		rc = dbtree_delete(cont->vc_dtx_active_hdl, BTR_PROBE_EQ,
 				   &kiov, NULL);
-		if (rc == 0 || rc == -DER_NONEXIST) {
+		if (rc == 0) {
 			dtx_evict_lid(cont, daes[i]);
-		} else {
+		} else if (rc == -DER_NONEXIST) {
 			/* The DTX entry has been committed or aborted, but we
 			 * cannot remove it from the active table, can mark it
 			 * as 'committed' or 'aborted'. That will consume some
