@@ -3427,8 +3427,21 @@ crt_group_secondary_modify(crt_group_t *grp, d_rank_list_t *sec_ranks,
 
 	/* Remove ranks based on to_remove list */
 	for (i = 0; i < to_remove->rl_nr; i++) {
+		struct crt_grp_priv     *prim_grp_priv;
+
 		rank = to_remove->rl_ranks[i];
 		crt_group_rank_remove_internal(grp_priv, rank);
+
+		/* Since there is no primary rank automatically update
+		 * mechanism, let's do it with secondary group for
+		 * the moment temporarily. XXX
+		 */
+		prim_grp_priv = crt_grp_pub2priv(NULL);
+		D_RWLOCK_WRLOCK(&prim_grp_priv->gp_rwlock);
+		crt_group_rank_remove_internal(prim_grp_priv, rank);
+
+		D_RWLOCK_UNLOCK(&prim_grp_priv->gp_rwlock);
+		crt_swim_rank_del(prim_grp_priv, rank);
 	}
 
 	d_rank_list_free(to_add);

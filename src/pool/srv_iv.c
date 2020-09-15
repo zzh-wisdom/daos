@@ -429,11 +429,12 @@ pool_iv_ent_copy(struct ds_iv_key *key, d_sg_list_t *dst, d_sg_list_t *src)
 			int src_len = pool_buf_size(
 				src_iv->piv_map.piv_pool_buf.pb_nr);
 			int dst_len = dst->sg_iovs[0].iov_buf_len -
-				      sizeof(*dst_iv) + sizeof(struct pool_buf);
+				      sizeof(struct pool_iv_map) +
+				      sizeof(struct pool_buf);
 
 			/* copy pool buf */
 			if (dst_len < src_len) {
-				D_ERROR("dst %d\n src %d\n", dst_len, src_len);
+				D_ERROR("dst %d src %d\n", dst_len, src_len);
 				return -DER_REC2BIG;
 			}
 

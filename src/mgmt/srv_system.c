@@ -719,6 +719,7 @@ ds_mgmt_join_handler(struct mgmt_join_in *in, struct mgmt_join_out *out)
 			goto out_lock;
 		}
 		D_DEBUG(DB_TRACE, "rank %u rejoined\n", rank);
+		svc->ms_map_version++;
 		ds_rsvc_request_map_dist(&svc->ms_rsvc);
 		rc = 0;
 		goto out_lock;
