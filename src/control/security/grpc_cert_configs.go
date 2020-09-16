@@ -32,6 +32,7 @@ import (
 
 func serverTLSConfig(cfg *TransportConfig) *tls.Config {
 	return &tls.Config{
+		ServerName:               "localhost",
 		ClientAuth:               tls.RequireAnyClientCert,
 		Certificates:             []tls.Certificate{*cfg.tlsKeypair},
 		ClientCAs:                cfg.caPool,
@@ -43,16 +44,14 @@ func serverTLSConfig(cfg *TransportConfig) *tls.Config {
 			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 		},
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			/*opts := x509.VerifyOptions{
-				DNSName:       cs.ServerName,
+			opts := x509.VerifyOptions{
+				DNSName:       "localhost",
 				Intermediates: x509.NewCertPool(),
 				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 			}
 			for _, cert := range cs.PeerCertificates[1:] {
 				opts.Intermediates.AddCert(cert)
-			}*/
-			/*_, err := cs.PeerCertificates[0].Verify(opts)
-			return err*/
+			}
 			return nil
 		},
 	}
@@ -60,7 +59,7 @@ func serverTLSConfig(cfg *TransportConfig) *tls.Config {
 
 func clientTLSConfig(cfg *TransportConfig) *tls.Config {
 	return &tls.Config{
-		ServerName:               cfg.ServerName,
+		ServerName:               "localhost",
 		Certificates:             []tls.Certificate{*cfg.tlsKeypair},
 		RootCAs:                  cfg.caPool,
 		MinVersion:               tls.VersionTLS12,
@@ -73,7 +72,7 @@ func clientTLSConfig(cfg *TransportConfig) *tls.Config {
 		InsecureSkipVerify: true,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			opts := x509.VerifyOptions{
-				DNSName:       cs.ServerName,
+				DNSName:       "localhost",
 				Roots:         cfg.caPool,
 				Intermediates: x509.NewCertPool(),
 			}
