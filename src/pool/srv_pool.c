@@ -2704,14 +2704,16 @@ ds_pool_query_handler(crt_rpc_t *rpc)
 	if (rc != 0)
 		D_GOTO(out_map_version, rc);
 
-	//D_PRINT("Scheduling object enumeration\n");
-	struct pool_target_id id = { 0 };
-	struct pool_target_id_list tgts = { .pti_number = 1, .pti_ids = &id };
-	rc = ds_rebuild_schedule(in->pqi_op.pi_uuid, map_version, &tgts,
-				 RB_OP_DEMO_ENUMERATE);
-	if (rc != 0) {
-		D_PRINT("failed to schedule enumerate rc: "DF_RC"\n",
-			DP_RC(rc));
+	if (!daos_rpc_from_client(rpc) && in->pqi_query_bits == 0x00000003) {
+		// D_PRINT("Scheduling object enumeration, bits: %08lX\n", in->pqi_query_bits);
+		struct pool_target_id id = { 0 };
+		struct pool_target_id_list tgts = { .pti_number = 1, .pti_ids = &id };
+		rc = ds_rebuild_schedule(in->pqi_op.pi_uuid, map_version, &tgts,
+					 RB_OP_DEMO_ENUMERATE);
+		if (rc != 0) {
+			D_PRINT("failed to schedule enumerate rc: "DF_RC"\n",
+				DP_RC(rc));
+		}
 	}
 
 out_map_version:
