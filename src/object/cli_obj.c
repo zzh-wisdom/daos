@@ -3266,7 +3266,7 @@ obj_comp_cb(tse_task_t *task, void *data)
 	    ((!obj_is_modification_opc(obj_auxi->opc) &&
 	      task->dt_result == -DER_INPROGRESS) ||
 	     (obj_is_modification_opc(obj_auxi->opc) &&
-	      task->dt_result == 0))) {
+	      task->dt_result == 0)) && obj_auxi->req_tgts.ort_shard_tgts) {
 		int	idx;
 
 		idx = obj_auxi->req_tgts.ort_shard_tgts->st_shard /
