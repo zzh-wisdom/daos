@@ -89,11 +89,11 @@ func (r *Runner) run(ctx context.Context, args, env []string) error {
 
 	cmd := exec.CommandContext(ctx, binPath, args...)
 	cmd.Stdout = &cmdLogger{
-		logFn:  r.log.Info,
+		logFn:  r.log.Debug,
 		prefix: fmt.Sprintf("%s:%d", ioServerBin, r.Config.Index),
 	}
 	cmd.Stderr = &cmdLogger{
-		logFn:  r.log.Error,
+		logFn:  r.log.Debug,
 		prefix: fmt.Sprintf("%s:%d", ioServerBin, r.Config.Index),
 	}
 	// FIXME(DAOS-3105): This shouldn't be the default. The command environment

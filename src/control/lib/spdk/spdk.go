@@ -79,7 +79,7 @@ func (o EnvOptions) toC() (opts *C.struct_spdk_env_opts, cWhiteListPtr *unsafe.P
 	}
 
 	// quiet DPDK EAL logging by setting log level to ERROR
-	opts.env_context = unsafe.Pointer(C.CString("--log-level=lib.eal:4"))
+	opts.env_context = unsafe.Pointer(C.CString("--log-level=lib.eal:8"))
 
 	if len(o.PciWhiteList) > 0 {
 		cWhiteListPtr, err = pciListToC(o.PciWhiteList)

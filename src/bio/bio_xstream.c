@@ -345,7 +345,7 @@ bio_spdk_env_init(void)
 		opts.shm_id = nvme_glb.bd_shm_id;
 
 	/* quiet DPDK logging by setting level to ERROR */
-	opts.env_context = "--log-level=lib.eal:4";
+	opts.env_context = "--log-level=lib.eal:8";
 
 	rc = spdk_env_init(&opts);
 	if (opts.pci_whitelist != NULL)
@@ -380,7 +380,6 @@ bio_spdk_env_init(void)
 
 	rc = spdk_thread_lib_init(NULL, 0);
 	if (rc != 0) {
-		rc = -DER_INVAL;
 		D_ERROR("Failed to init SPDK thread lib, %s (%d)\n",
 			spdk_strerror(rc), rc);
 		spdk_env_fini();
