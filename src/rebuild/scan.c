@@ -306,6 +306,8 @@ rebuild_object_insert(struct rebuild_tgt_pool_tracker *rpt,
 	D_DEBUG(DB_REBUILD, "insert "DF_UOID"/"DF_UUID" tgt %u rc %d\n",
 		DP_UOID(oid), DP_UUID(co_uuid), tgt_id, rc);
 
+	if (rc == -DER_EXIST)
+		rc = 0;
 	return rc;
 }
 
