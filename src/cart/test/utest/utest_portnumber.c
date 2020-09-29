@@ -117,7 +117,8 @@ run_test_fork(void **state)
 	assert_true(result2 != 0);
 	assert_true(rc == 0);    /* prevents compile issue */
 }
-static void
+}
+
 test_port_tcp(void **state)
 {
 	setenv("OFI_INTERFACE", "lo", 1);
