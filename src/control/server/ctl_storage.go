@@ -88,6 +88,9 @@ func (c *StorageControlService) canAccessBdevs(sr *bdev.ScanResponse) (missing [
 
 // Setup delegates to Storage implementation's Setup methods.
 func (c *StorageControlService) Setup() error {
+	c.log.Error("Setup() not supported on Endeavour")
+	return nil
+
 	sr, err := c.bdev.Scan(bdev.ScanRequest{})
 	if err != nil {
 		c.log.Debugf("%s\n", errors.Wrap(err, "Warning, NVMe Scan"))
