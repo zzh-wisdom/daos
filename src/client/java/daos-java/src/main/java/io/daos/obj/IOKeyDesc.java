@@ -107,7 +107,7 @@ public class IOKeyDesc {
     anchorBuffer.writerIndex(anchorBuffer.capacity());
     // 4 for actual number of keys returned, (2 + dkeyBytes.length) for dkeys
     int descLen = 4 + ((dkeyBytes == null) ? 0 : (Constants.ENCODED_LENGTH_KEY + dkeyBytes.length))
-                  + IOKeyDesc.getKeyDescLen() * this.batchSize;
+      + IOKeyDesc.getKeyDescLen() * this.batchSize;
     descBuffer = BufferAllocator.objBufWithNativeOrder(descLen);
     keyBuffer = BufferAllocator.objBufWithNativeOrder(akeyLen * this.batchSize);
     keyBuffer.writerIndex(keyBuffer.capacity());

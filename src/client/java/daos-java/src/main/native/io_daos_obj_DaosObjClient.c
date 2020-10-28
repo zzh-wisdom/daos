@@ -200,7 +200,7 @@ Java_io_daos_obj_DaosObjClient_queryObjectAttribute(JNIEnv *env,
     int rc;
 
     memcpy(&oh, &objectHandle, sizeof(oh));
-    rc = daos_obj_query(oh, DAOS_TX_NONE, &attr, &ranks, NULL);
+    rc = daos_obj_query(oh, &attr, &ranks, NULL);
 
     if (rc) {
         char *msg = "Failed to query DAOS object attribute";
@@ -394,9 +394,9 @@ static inline void copy_kd(char *desc_buffer, daos_key_desc_t *kd)
     desc_buffer += 8;
     memcpy(desc_buffer, &kd->kd_val_type, 4);
     desc_buffer += 4;
-    memcpy(desc_buffer, &kd->kd_csum_type, 2);
+//    memcpy(desc_buffer, &kd->kd_csum_type, 2);
     desc_buffer += 2;
-    memcpy(desc_buffer, &kd->kd_csum_len, 2);
+//    memcpy(desc_buffer, &kd->kd_csum_len, 2);
     desc_buffer += 2;
 }
 
@@ -463,8 +463,9 @@ static inline int list_keys(jlong objectHandle, char *desc_buffer_head,
         // copy to kds and adjust sgl iov
         for (i = idx - nbr; i < idx; i++) {
             copy_kd(desc_buffer, &kds[i]);
-            desc_buffer += 16;
-            key_buffer_idx += (kds[i].kd_key_len + kds[i].kd_csum_len);
+            desc_buffer += 12;
+            // key_buffer_idx += (kds[i].kd_key_len + kds[i].kd_csum_len);
+            key_buffer_idx += kds[i].kd_key_len;
         }
         if (remaining <= 0) {
             quit_code = KEY_LIST_CODE_REACH_LIMIT;

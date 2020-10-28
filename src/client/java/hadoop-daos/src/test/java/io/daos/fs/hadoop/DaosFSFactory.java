@@ -30,8 +30,8 @@ import java.io.IOException;
  *
  */
 public class DaosFSFactory {
-  public final static String defaultPoolId = "f0bc1688-23f9-4c17-bba3-2f31613ac990";
-  public final static String defaultContId = "f7b421e5-63bd-428d-96ec-922b9032a3b2";
+  public final static String defaultPoolId = "96c03ef7-5e00-43b7-9353-2d0b02cfef3e";
+  public final static String defaultContId = "4e3ce803-b4ef-4b26-8166-70189b729269";
   public final static String pooluuid = System.getProperty("pool_id", defaultPoolId);
   public final static String contuuid = System.getProperty("cont_id", defaultContId);
   public final static String svc = "0";
