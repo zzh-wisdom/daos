@@ -64,7 +64,7 @@ struct pool_svc {
 	struct ds_pool	       *ps_pool;
 };
 
-static bool pool_disable_evict = false;
+static bool pool_disable_evict = true;
 static int pool_prop_read(struct rdb_tx *tx, const struct pool_svc *svc,
 			  uint64_t bits, daos_prop_t **prop_out);
 static int pool_space_query_bcast(crt_context_t ctx, struct pool_svc *svc,
