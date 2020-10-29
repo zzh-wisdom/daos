@@ -1,0 +1,56 @@
+hosts:
+  test_servers:
+    - server-A
+timeout: 200
+faults:
+    no_faults:
+      fault_list: []
+server_config:
+    name: daos_server
+    transport_config:
+      allow_insecure: True
+agent_config:
+    transport_config:
+      allow_insecure: True
+dmg:
+    transport_config:
+      allow_insecure: True
+pool:
+    name: daos_server
+    createsize:
+      scm_size: 2G
+    createmode:
+      mode_RW:
+        mode: 146
+    createsvc:
+      svcn: 1
+    control_method: dmg
+container:
+  type: POSIX
+  control_method: daos
+ior:
+  np: 1
+  dfs_destroy: False
+  iorflags:
+      flags: "-v -W -w -r -R"
+  test_file: /testFile
+  repetitions: 1
+  transfersize_block_size:
+    4K:
+      transfer_size: '4K'
+      block_size: '512M'
+dfuse:
+  mount_dir: "/tmp/daos_dfuse/"
+
+mdtest:
+  client_processes:
+    np: 1
+  num_of_files_dirs: 10
+  test_dir: "/"
+  iteration: 1
+  dfs_destroy: True
+  manager: "MPICH"
+  flags: "-F -C"
+  write_bytes: 4096
+  read_bytes: 4096
+  depth: 0
