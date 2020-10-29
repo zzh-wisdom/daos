@@ -24,10 +24,12 @@
 package bdev
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
 
+	"github.com/daos-stack/daos/src/control/common"
 	"github.com/daos-stack/daos/src/control/fault"
 	"github.com/daos-stack/daos/src/control/logging"
 	"github.com/daos-stack/daos/src/control/pbin"
@@ -40,7 +42,7 @@ type (
 		pbin.ForwardableRequest
 		DeviceList []string
 		DisableVMD bool
-		Rescan     bool
+		NoCache    bool
 	}
 
 	// ScanResponse contains information gleaned during a successful Scan operation.
@@ -153,26 +155,89 @@ func (p *Provider) IsVMDDisabled() bool {
 	return p.backend.IsVMDDisabled()
 }
 
-// Scan attempts to perform a scan to discover NVMe components in the system.
-func (p *Provider) Scan(req ScanRequest) (*ScanResponse, error) {
+func (resp *ScanResponse) filter(pciFilter ...string) (int, *ScanResponse) {
+	var skipped int
+	out := make(storage.NvmeControllers, 0)
+
+	if len(pciFilter) == 0 {
+		return skipped, &ScanResponse{Controllers: resp.Controllers}
+	}
+
+	for _, c := range resp.Controllers {
+		if !common.Includes(pciFilter, c.PciAddr) {
+			skipped++
+			continue
+		}
+		out = append(out, c)
+	}
+
+	return skipped, &ScanResponse{Controllers: out}
+}
+
+type scanFwdFn func(ScanRequest) (*ScanResponse, error)
+
+func forwardScan(req ScanRequest, cache *ScanResponse, scan scanFwdFn) (msg string, resp *ScanResponse, update bool, err error) {
+	var action string
+	switch {
+	case req.NoCache:
+		action = "bypass"
+		resp, err = scan(req)
+	case cache != nil && len(cache.Controllers) != 0:
+		action = "reuse"
+		resp = cache
+	default:
+		action = "update"
+		resp, err = scan(req)
+		if err == nil && resp != nil {
+			update = true
+		}
+	}
+
+	msg = fmt.Sprintf("bdev scan: %s cache", action)
+
+	if err != nil {
+		return
+	}
+
+	if resp == nil {
+		err = errors.New("unexpected nil response from bdev backend")
+		return
+	}
+
+	msg += fmt.Sprintf(" (%d", len(resp.Controllers))
+	if len(req.DeviceList) != 0 && len(resp.Controllers) != 0 {
+		var num int
+		num, resp = resp.filter(req.DeviceList...)
+		if num != 0 {
+			msg += fmt.Sprintf("-%d filtered", num)
+		}
+	}
+
+	msg += " devices)"
+
+	return
+}
+
+// Scan attempts to perform a scan to discover NVMe components in the
+// system. Results will be cached at the provider and returned if
+// "NoCache" is set to "false" in the request. Returned results will be
+// filtered by request "DeviceList" and empty filter implies allowing all.
+func (p *Provider) Scan(req ScanRequest) (resp *ScanResponse, err error) {
 	if p.shouldForward(req) {
 		req.DisableVMD = p.IsVMDDisabled()
 
 		p.Lock()
 		defer p.Unlock()
 
-		if p.scanCache == nil || req.Rescan {
-			p.log.Debug("bdev provider rescan requested")
-
-			resp, err := p.fwd.Scan(req)
-			if err != nil {
-				return nil, err
-			}
+		msg, resp, update, err := forwardScan(req, p.scanCache, p.fwd.Scan)
+		p.log.Debug(msg)
+		if update {
 			p.scanCache = resp
 		}
 
-		return p.scanCache, nil
+		return resp, err
 	}
+
 	// set vmd state on remote provider in forwarded request
 	if req.IsForwarded() && req.DisableVMD {
 		p.disableVMD()
@@ -181,8 +246,8 @@ func (p *Provider) Scan(req ScanRequest) (*ScanResponse, error) {
 	return p.backend.Scan(req)
 }
 
-// Prepare attempts to perform all actions necessary to make NVMe components available for
-// use by DAOS.
+// Prepare attempts to perform all actions necessary to make NVMe
+// components available for use by DAOS.
 func (p *Provider) Prepare(req PrepareRequest) (*PrepareResponse, error) {
 	if p.shouldForward(req) {
 		resp, err := p.fwd.Prepare(req)
@@ -208,7 +273,8 @@ func (p *Provider) Prepare(req PrepareRequest) (*PrepareResponse, error) {
 	return p.backend.Prepare(req)
 }
 
-// Format attempts to initialize NVMe devices for use by DAOS (NB: no-op for non-NVMe devices).
+// Format attempts to initialize NVMe devices for use by DAOS.
+// Note that this is a no-op for non-NVMe devices.
 func (p *Provider) Format(req FormatRequest) (*FormatResponse, error) {
 	if len(req.DeviceList) == 0 {
 		return nil, errors.New("empty DeviceList in FormatRequest")

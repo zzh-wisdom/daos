@@ -185,7 +185,7 @@ obj_rw_reply(crt_rpc_t *rpc, int status, uint64_t epoch,
 
 		daos_recx_ep_list_free(orwo->orw_rels.ca_arrays,
 				       orwo->orw_rels.ca_count);
-	
+
 		if (ioc->ioc_free_sgls) {
 			struct obj_rw_in *orw = crt_req_get(rpc);
 			d_sg_list_t *sgls = orwo->orw_sgls.ca_arrays;
@@ -896,10 +896,19 @@ csum_verify_keys(struct daos_csummer *csummer, daos_key_t *dkey,
 	if (!daos_csummer_initialized(csummer) || csummer->dcs_skip_key_verify)
 		return 0;
 
-	rc = daos_csummer_verify_key(csummer, dkey, dci);
-	if (rc != 0) {
-		D_ERROR("daos_csummer_verify_key error for dkey: %d", rc);
-		return rc;
+	if (!DAOS_FAIL_CHECK(DAOS_VC_DIFF_DKEY)) {
+		/**
+		 * with DAOS_VC_DIFF_DKEY, the dkey will be corrupt on purpose
+		 * for object verification tests. Don't reject the
+		 * update in this case
+		 */
+		rc = daos_csummer_verify_key(csummer, dkey, dci);
+		if (rc != 0) {
+			D_ERROR("daos_csummer_verify_key error for dkey: %d",
+				rc);
+			return rc;
+		}
+
 	}
 
 	for (i = 0; i < oia->oia_iod_nr; i++) {
@@ -1091,12 +1100,16 @@ obj_fetch_create_maps(crt_rpc_t *rpc, struct bio_desc *biod)
 			}
 		}
 
+		daos_iom_sort(map);
+
 		/** allocated and used should be the same */
 		D_ASSERTF(map->iom_nr == map->iom_nr_out,
 			  "map->iom_nr(%d) == map->iom_nr_out(%d)",
 			  map->iom_nr, map->iom_nr_out);
 		map->iom_recx_lo = map->iom_recxs[0];
 		map->iom_recx_hi = map->iom_recxs[map->iom_nr - 1];
+		if (orw->orw_flags & ORF_CREATE_MAP_DETAIL)
+			map->iom_flags = DAOS_IOMF_DETAIL;
 	}
 
 	orwo->orw_maps.ca_count = iods_nr;
@@ -1399,7 +1412,8 @@ obj_local_rw(crt_rpc_t *rpc, struct obj_io_context *ioc,
 				     dth);
 		daos_recx_ep_list_free(shadows, orw->orw_nr);
 		if (rc) {
-			D_CDEBUG(rc == -DER_INPROGRESS, DB_IO, DLOG_ERR,
+			D_CDEBUG(rc == -DER_INPROGRESS || rc == -DER_NONEXIST,
+				 DB_IO, DLOG_ERR,
 				 "Fetch begin for "DF_UOID" failed: "DF_RC"\n",
 				 DP_UOID(orw->orw_oid), DP_RC(rc));
 			goto out;
@@ -1521,6 +1535,8 @@ obj_local_rw(crt_rpc_t *rpc, struct obj_io_context *ioc,
 		obj_log_csum_err();
 post:
 	err = bio_iod_post(biod);
+	rc = rc ? : err;
+out:
 	if (bsgls_dup != NULL) {
 		int	i;
 
@@ -1530,8 +1546,7 @@ post:
 		}
 		D_FREE(bsgls_dup);
 	}
-	rc = rc ? : err;
-out:
+
 	rc = obj_rw_complete(rpc, ioc->ioc_map_ver, ioh, rc, dth);
 	D_TIME_END(time_start, OBJ_PF_UPDATE_LOCAL);
 	return rc;
@@ -1698,9 +1713,7 @@ do_obj_ioc_begin(uint32_t rpc_map_ver, uuid_t pool_uuid,
 		if (opc == DAOS_OBJ_RPC_CPD)
 			D_GOTO(out, rc = -DER_TX_RESTART);
 
-		if (obj_is_modification_opc(opc))
-			D_GOTO(out, rc = -DER_STALE);
-		/* It is harmless if fetch with old pool map version. */
+		D_GOTO(out, rc = -DER_STALE);
 	} else if (DAOS_FAIL_CHECK(DAOS_DTX_STALE_PM)) {
 		D_GOTO(out, rc = -DER_STALE);
 	}
@@ -2131,7 +2144,7 @@ again:
 		dlh.dlh_handle.dth_resent = 1;
 
 	/* Execute the operation on all targets */
-	rc = dtx_leader_exec_ops(&dlh, obj_tgt_update, &exec_arg);
+	rc = dtx_leader_exec_ops(&dlh, obj_tgt_update, NULL, NULL, &exec_arg);
 
 	if (DAOS_FAIL_CHECK(DAOS_DTX_LEADER_ERROR))
 		rc = -DER_IO;
@@ -2710,8 +2723,9 @@ ds_obj_tgt_punch_handler(crt_rpc_t *rpc)
 	/* local RPC handler */
 	rc = obj_local_punch(opi, opc_get(rpc->cr_opc), &ioc, &dth);
 	if (rc != 0) {
-		D_ERROR(DF_UOID": error="DF_RC".\n", DP_UOID(opi->opi_oid),
-			DP_RC(rc));
+		D_CDEBUG(rc == -DER_INPROGRESS, DB_IO, DLOG_ERR,
+			 DF_UOID": error="DF_RC".\n", DP_UOID(opi->opi_oid),
+			 DP_RC(rc));
 		D_GOTO(out, rc);
 	}
 out:
@@ -2726,8 +2740,56 @@ out:
 }
 
 static int
+obj_punch_agg_cb(struct dtx_leader_handle *dlh, void *agg_arg)
+{
+	uint64_t	*flag = agg_arg;
+	int		succeeds = 0;
+	int		allow_failure = 0;
+	int		allow_failure_cnt = 0;
+	int		result = 0;
+	int		i;
+
+	D_ASSERT(flag != NULL);
+	if (*flag & DAOS_COND_PUNCH)
+		allow_failure = -DER_NONEXIST;
+
+	for (i = 0; i < dlh->dlh_sub_cnt; i++) {
+		struct dtx_sub_status	*sub = &dlh->dlh_subs[i];
+
+		if (sub->dss_result == 0) {
+			succeeds++;
+		} else if (sub->dss_result == allow_failure) {
+			allow_failure_cnt++;
+		} else {
+			/* Ignore INPROGRESS if there other failures */
+			if (result == -DER_INPROGRESS || result == 0)
+				result = sub->dss_result;
+		}
+	}
+
+	D_DEBUG(DB_IO, DF_DTI" %d/%d shards flags "DF_X64" result %d\n",
+		DP_DTI(&dlh->dlh_handle.dth_xid), allow_failure_cnt,
+		succeeds, *flag, result);
+
+	if (*flag & DAOS_COND_PUNCH) {
+		/* For punch, let's ignore DER_NONEXIST if there are shards
+		 * succeed, since the object may not exist on some shards
+		 * due to EC partial update.
+		 */
+		if (result == 0 && succeeds == 0) {
+			D_ASSERT(dlh->dlh_sub_cnt == allow_failure_cnt);
+			return -DER_NONEXIST;
+		}
+
+		return result;
+	}
+
+	return result;
+}
+
+static int
 obj_tgt_punch(struct dtx_leader_handle *dlh, void *arg, int idx,
-		 dtx_sub_comp_cb_t comp_cb)
+	      dtx_sub_comp_cb_t comp_cb)
 {
 	struct ds_obj_exec_arg	*exec_arg = arg;
 
@@ -2885,7 +2947,8 @@ again:
 		dlh.dlh_handle.dth_resent = 1;
 
 	/* Execute the operation on all shards */
-	rc = dtx_leader_exec_ops(&dlh, obj_tgt_punch, &exec_arg);
+	rc = dtx_leader_exec_ops(&dlh, obj_tgt_punch, obj_punch_agg_cb,
+				 &opi->opi_api_flags, &exec_arg);
 
 	if (DAOS_FAIL_CHECK(DAOS_DTX_LEADER_ERROR))
 		rc = -DER_IO;
@@ -3457,9 +3520,14 @@ ds_obj_dtx_handle_one(crt_rpc_t *rpc, struct daos_cpd_sub_head *dcsh,
 			if (rc != 0)
 				goto out;
 		} else {
-			if (dcsr->dcsr_opc != DCSO_PUNCH_OBJ &&
-			    dcsr->dcsr_opc != DCSO_PUNCH_DKEY &&
-			    dcsr->dcsr_opc != DCSO_PUNCH_AKEY) {
+			daos_key_t	*dkey;
+
+			if (dcsr->dcsr_opc == DCSO_PUNCH_OBJ) {
+				dkey = NULL;
+			} else if (dcsr->dcsr_opc == DCSO_PUNCH_DKEY ||
+				   dcsr->dcsr_opc == DCSO_PUNCH_AKEY) {
+				dkey = &dcsr->dcsr_dkey;
+			} else {
 				D_ERROR("Unknown sub request opc %u for obj "
 					DF_UOID", DTX "DF_DTI":\n",
 					dcsr->dcsr_opc, DP_UOID(dcsr->dcsr_oid),
@@ -3475,8 +3543,9 @@ ds_obj_dtx_handle_one(crt_rpc_t *rpc, struct daos_cpd_sub_head *dcsh,
 
 			rc = vos_obj_punch(ioc->ioc_coc->sc_hdl, dcsr->dcsr_oid,
 				dcsh->dcsh_epoch.oe_value, dth->dth_ver,
-				dcsr->dcsr_api_flags, &dcsr->dcsr_dkey,
-				dcsr->dcsr_nr, dcsr->dcsr_punch.dcp_akeys, dth);
+				dcsr->dcsr_api_flags, dkey,
+				dkey != NULL ? dcsr->dcsr_nr : 0, dkey != NULL ?
+				dcsr->dcsr_punch.dcp_akeys : NULL, dth);
 			if (rc != 0)
 				goto out;
 		}
@@ -3818,7 +3887,7 @@ ds_obj_dtx_leader_ult(void *arg)
 		dlh.dlh_handle.dth_resent = 1;
 
 	/* Execute the operation on all targets */
-	rc = dtx_leader_exec_ops(&dlh, obj_obj_dtx_leader, &exec_arg);
+	rc = dtx_leader_exec_ops(&dlh, obj_obj_dtx_leader, NULL, NULL, &exec_arg);
 
 	/* Stop the distribute transaction */
 	rc = dtx_leader_end(&dlh, dca->dca_ioc->ioc_coc, rc);

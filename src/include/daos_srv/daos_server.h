@@ -673,10 +673,11 @@ int dsc_obj_list_akey(daos_handle_t oh, daos_epoch_t epoch,
 		daos_key_desc_t *kds, d_sg_list_t *sgl,
 		daos_anchor_t *anchor);
 
-int dsc_obj_fetch(daos_handle_t oh, daos_epoch_t epoch,
-		daos_key_t *dkey, unsigned int nr,
-		daos_iod_t *iods, d_sg_list_t *sgls,
-		daos_iom_t *maps);
+int dsc_obj_fetch(daos_handle_t oh, daos_epoch_t epoch, daos_key_t *dkey,
+		  unsigned int nr, daos_iod_t *iods, d_sg_list_t *sgls,
+		  daos_iom_t *maps, unsigned int extra_flag,
+		  unsigned int *extra_arg);
+
 int dsc_obj_list_obj(daos_handle_t oh, daos_epoch_range_t *epr,
 		     daos_key_t *dkey, daos_key_t *akey, daos_size_t *size,
 		     uint32_t *nr, daos_key_desc_t *kds, d_sg_list_t *sgl,
@@ -684,6 +685,8 @@ int dsc_obj_list_obj(daos_handle_t oh, daos_epoch_range_t *epr,
 		     daos_anchor_t *akey_anchor, d_iov_t *csum);
 int dsc_pool_tgt_exclude(const uuid_t uuid, const char *grp,
 			 const d_rank_list_t *svc, struct d_tgt_list *tgts);
+int dsc_pool_tgt_reint(const uuid_t uuid, const char *grp,
+		       const d_rank_list_t *svc, struct d_tgt_list *tgts);
 
 int dsc_task_run(tse_task_t *task, tse_task_cb_t retry_cb, void *arg,
 		 int arg_size, bool sync);
@@ -771,8 +774,8 @@ struct dss_enum_unpack_io {
 	/* punched epochs for dkey */
 	daos_epoch_t		ui_dkey_punch_eph;
 	d_sg_list_t		*ui_sgls;	/**< optional */
-	uint32_t		 ui_version;
-	uint32_t		 ui_is_array_exist:1;
+	uint32_t		ui_version;
+	uint32_t		ui_type;
 };
 
 typedef int (*dss_enum_unpack_cb_t)(struct dss_enum_unpack_io *io, void *arg);
@@ -838,6 +841,7 @@ enum dss_media_error_type {
 void dss_init_state_set(enum dss_init_state state);
 
 int notify_bio_error(int media_err_type, int tgt_id);
+int get_pool_svc_ranks(uuid_t pool_uuid, d_rank_list_t **svc_ranks);
 
 bool is_container_from_srv(uuid_t pool_uuid, uuid_t coh_uuid);
 bool is_pool_from_srv(uuid_t pool_uuid, uuid_t poh_uuid);

@@ -35,6 +35,7 @@
 #include <daos/drpc_modules.h>
 #include <daos/drpc.pb-c.h>
 #include <daos/event.h>
+#include <daos/job.h>
 #include "srv.pb-c.h"
 #include "rpc.h"
 #include <errno.h>
@@ -286,6 +287,9 @@ put_attach_info(int npsrs, struct dc_mgmt_psr *psrs)
 {
 	int i;
 
+	if (psrs == NULL)
+		return;
+
 	for (i = 0; i < npsrs; i++)
 		D_FREE(psrs[i].uri);
 	D_FREE(psrs);
@@ -325,6 +329,7 @@ get_attach_info(const char *name, int *npsrs, struct dc_mgmt_psr **psrs,
 
 	/* Prepare the GetAttachInfo request. */
 	req.sys = (char *)name;
+	req.jobid = dc_jobid;
 	reqb_size = mgmt__get_attach_info_req__get_packed_size(&req);
 	D_ALLOC(reqb, reqb_size);
 	if (reqb == NULL) {
@@ -394,32 +399,48 @@ get_attach_info(const char *name, int *npsrs, struct dc_mgmt_psr **psrs,
 
 	if (sy_info) {
 		if (strnlen(resp->provider, sizeof(sy_info->provider)) == 0) {
-			D_ERROR("GetAttachInfo provider string is empty\n");
-			D_GOTO(out_resp, rc = -DER_INVAL);
+			D_ERROR("GetAttachInfo failed: %d. "
+				"provider is undefined. "
+				"libdaos.so is incompatible with DAOS Agent.\n",
+				resp->status);
+			D_GOTO(out_resp, rc = -DER_AGENT_INCOMPAT);
 		}
 
 		if (strnlen(resp->interface, sizeof(sy_info->interface)) == 0) {
-			D_ERROR("GetAttachInfo interface string is empty\n");
-			D_GOTO(out_resp, rc = -DER_INVAL);
+			D_ERROR("GetAttachInfo failed: %d. "
+				"interface is undefined. "
+				"libdaos.so is incompatible with DAOS Agent.\n",
+				resp->status);
+			D_GOTO(out_resp, rc = -DER_AGENT_INCOMPAT);
 		}
 
 		if (strnlen(resp->domain, sizeof(sy_info->domain)) == 0) {
-			D_ERROR("GetAttachInfo domain string is empty\n");
-			D_GOTO(out_resp, rc = -DER_INVAL);
+			D_ERROR("GetAttachInfo failed: %d. "
+				"domain string is undefined. "
+				"libdaos.so is incompatible with DAOS Agent.\n",
+				resp->status);
+			D_GOTO(out_resp, rc = -DER_AGENT_INCOMPAT);
 		}
 
 		if (copy_str(sy_info->provider, resp->provider)) {
-			D_ERROR("GetAttachInfo provider string too long\n");
+			D_ERROR("GetAttachInfo failed: %d. "
+				"provider string too long.\n",
+				resp->status);
+
 			D_GOTO(out_resp, rc = -DER_INVAL);
 		}
 
 		if (copy_str(sy_info->interface, resp->interface)) {
-			D_ERROR("GetAttachInfo interface string too long\n");
+			D_ERROR("GetAttachInfo failed: %d. "
+				"interface string too long\n",
+				resp->status);
 			D_GOTO(out_resp, rc = -DER_INVAL);
 		}
 
 		if (copy_str(sy_info->domain, resp->domain)) {
-			D_ERROR("GetAttachInfo domain string too long\n");
+			D_ERROR("GetAttachInfo failed: %d. "
+				"domain string too long\n",
+				resp->status);
 			D_GOTO(out_resp, rc = -DER_INVAL);
 		}
 
@@ -431,6 +452,11 @@ get_attach_info(const char *name, int *npsrs, struct dc_mgmt_psr **psrs,
 			"CRT_CTX_SHARE_ADDR: %u, CRT_TIMEOUT: %u\n",
 			sy_info->provider, sy_info->interface, sy_info->domain,
 			sy_info->crt_ctx_share_addr, sy_info->crt_timeout);
+	} else {
+		D_ERROR("GetAttachInfo failed: %d. "
+			"libdaos.so is incompatible with DAOS Agent.\n",
+			resp->status);
+		D_GOTO(out_resp, rc = -DER_AGENT_INCOMPAT);
 	}
 
 out_resp:
@@ -454,13 +480,13 @@ out:
 int dc_mgmt_net_cfg(const char *name)
 {
 	int rc;
-	int npsrs;
+	int npsrs = 0;
 	char buf[SYS_INFO_BUF_SIZE];
 	char *crt_timeout;
 	char *ofi_interface;
 	char *ofi_domain;
 	struct sys_info sy_info;
-	struct dc_mgmt_psr *psrs;
+	struct dc_mgmt_psr *psrs = NULL;
 
 	if (name == NULL)
 		name = DAOS_DEFAULT_SYS_NAME;
@@ -468,7 +494,7 @@ int dc_mgmt_net_cfg(const char *name)
 	/* Query the agent for the CaRT network configuration parameters */
 	rc = get_attach_info(name, &npsrs, &psrs, &sy_info);
 	if (rc != 0)
-		return rc;
+		goto cleanup;
 
 	/* These two are always set */
 	rc = setenv("CRT_PHY_ADDR_STR", sy_info.provider, 1);

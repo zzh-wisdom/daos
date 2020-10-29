@@ -3248,8 +3248,11 @@ ds_pool_svc_set_prop(uuid_t pool_uuid, d_rank_list_t *ranks, daos_prop_t *prop)
 	D_DEBUG(DB_MGMT, DF_UUID": Setting pool prop\n", DP_UUID(pool_uuid));
 
 	rc = rsvc_client_init(&client, ranks);
-	if (rc != 0)
+	if (rc != 0) {
+		D_ERROR(DF_UUID": failed to init rsvc client: "DF_RC"\n",
+			DP_UUID(pool_uuid), DP_RC(rc));
 		D_GOTO(out, rc);
+	}
 
 rechoose:
 	ep.ep_grp = NULL; /* primary group */
@@ -4152,7 +4155,7 @@ pool_extend_map(struct rdb_tx *tx, struct pool_svc *svc,
 		int32_t *domains, bool *updated_p, uint32_t *map_version_p,
 		struct rsvc_hint *hint)
 {
-	struct pool_buf		*map_buf;
+	struct pool_buf		*map_buf = NULL;
 	struct pool_map		*map = NULL;
 	uint32_t		map_version;
 	bool			updated = false;
