@@ -909,6 +909,9 @@ create_bio_bdev(struct bio_xs_context *ctxt, const char *bdev_name,
 	/* Try to load blobstore without specifying 'bstype' first */
 	bs = load_blobstore(ctxt, d_bdev->bb_name, NULL, false, false,
 			    NULL, NULL);
+
+        bs = NULL;
+
 	if (bs == NULL) {
 		D_DEBUG(DB_MGMT, "Creating bs for %s\n", d_bdev->bb_name);
 
