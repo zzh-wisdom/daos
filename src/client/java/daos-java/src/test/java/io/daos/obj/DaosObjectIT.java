@@ -957,6 +957,27 @@ public class DaosObjectIT {
     }
   }
 
+  @Test
+  public void testReadData() throws Exception {
+    DaosObjectId id = new DaosObjectId(202011021441510000L, 12);
+    id.encode();
+    DaosObject object = client.getObject(id);
+    try {
+      object.open();
+      List<IODataDesc.Entry> list = new ArrayList<>();
+      int dataSize = 8556;
+      list.add(createEntryForFetch("5301", 1, 0, dataSize));
+      IODataDesc desc = object.createDataDescForUpdate("27", list);
+      object.update(desc);
+      Assert.assertEquals(dataSize, desc.getEntry(0).getActualSize());
+    } finally {
+//      if (object.isOpen()) {
+//        object.punch();
+//      }
+      object.close();
+    }
+  }
+
   @AfterClass
   public static void afterClass() throws IOException {
     if (client != null) {

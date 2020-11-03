@@ -40,10 +40,11 @@ public class DaosInputStreamTest {
     new DaosInputStream(file, null, ByteBuffer.allocate(10), 10);
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testNewDaosInputStreamIllegalSize() throws Exception {
     DaosFile file = mock(DaosFile.class);
-    new DaosInputStream(file, null, ByteBuffer.allocateDirect(10), 20);
+    DaosInputStream dis = new DaosInputStream(file, null, ByteBuffer.allocateDirect(10), 20);
+    Assert.assertEquals(10, dis.getPreLoadSize());
   }
 
   @Test(expected = IllegalArgumentException.class)
