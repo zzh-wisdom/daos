@@ -109,7 +109,7 @@ dtx_set_aborted(uint32_t *tx_lid)
 
 static inline int
 dtx_inprogress(struct vos_dtx_act_ent *dae, struct dtx_handle *dth,
-	       bool for_read)
+	       bool for_read, int pos)
 {
 	/* If the modifications crosses multiple redundancy groups, then it
 	 * is possible that the sub modifications on the DTX leader are not
@@ -130,8 +130,8 @@ dtx_inprogress(struct vos_dtx_act_ent *dae, struct dtx_handle *dth,
 		dth->dth_local_retry = 0;
 
 	D_DEBUG(DB_IO,
-		"Hit uncommitted DTX "DF_DTI" lid=%d, need %s retry\n",
-		DP_DTI(&DAE_XID(dae)), DAE_LID(dae),
+		"Hit uncommitted DTX "DF_DTI" at %d: lid=%d, need %s retry\n",
+		DP_DTI(&DAE_XID(dae)), pos, DAE_LID(dae),
 		(dth != NULL && dth->dth_local_retry) ? "local" : "remote");
 
 	return -DER_INPROGRESS;
@@ -1031,6 +1031,7 @@ vos_dtx_alloc(struct umem_instance *umm, struct dtx_handle *dth)
 	DAE_TGT_CNT(dae) = dth->dth_mbs->dm_tgt_cnt;
 	DAE_GRP_CNT(dae) = dth->dth_mbs->dm_grp_cnt;
 	DAE_MBS_DSIZE(dae) = dth->dth_mbs->dm_data_size;
+	DAE_MBS_FLAGS(dae) = dth->dth_mbs->dm_flags;
 
 	/* Will be set as dbd::dbd_index via vos_dtx_prepared(). */
 	DAE_INDEX(dae) = DTX_INDEX_INVAL;
@@ -1176,7 +1177,8 @@ vos_dtx_check_availability(daos_handle_t coh, uint32_t entry,
 
 	/* The following are for non-committable cases. */
 
-	if (intent == DAOS_INTENT_DEFAULT || intent == DAOS_INTENT_REBUILD) {
+	if (intent == DAOS_INTENT_DEFAULT || intent == DAOS_INTENT_REBUILD ||
+	    intent == DAOS_INTENT_IGNORE_NONCOMMITTED) {
 		if (!(DAE_FLAGS(dae) & DTE_LEADER) ||
 		    DAOS_FAIL_CHECK(DAOS_VOS_NON_LEADER)) {
 			/* Inavailable for rebuild case. */
@@ -1187,10 +1189,17 @@ vos_dtx_check_availability(daos_handle_t coh, uint32_t entry,
 			 * -DER_INPROGRESS, then the caller will retry
 			 * the RPC with leader replica.
 			 */
-			return dtx_inprogress(dae, dth, true);
+			return dtx_inprogress(dae, dth, true, 1);
 		}
 
-		/* For leader, non-committed DTX is unavailable. */
+		/* For transactional read, has to wait the non-committed
+		 * modification to guarantee the transaction semantics.
+		 */
+		if (dtx_is_valid_handle(dth) &&
+		    intent != DAOS_INTENT_IGNORE_NONCOMMITTED)
+			return dtx_inprogress(dae, dth, true, 2);
+
+		/* For stand-alone read on leader, ignore non-committed DTX. */
 		return ALB_UNAVAILABLE;
 	}
 
@@ -1210,7 +1219,7 @@ vos_dtx_check_availability(daos_handle_t coh, uint32_t entry,
 			 */
 			return ALB_UNAVAILABLE;
 
-		return dtx_inprogress(dae, dth, false);
+		return dtx_inprogress(dae, dth, false, 3);
 	}
 
 	D_ASSERTF(intent == DAOS_INTENT_UPDATE,
@@ -2229,6 +2238,7 @@ vos_dtx_cleanup_internal(struct dtx_handle *dth)
 				DP_DTI(&dth->dth_xid), DP_RC(rc));
 		} else {
 			dtx_act_ent_cleanup(cont, dae, true);
+			dth->dth_ent = NULL;
 			dtx_evict_lid(cont, dae);
 		}
 	}
@@ -2264,6 +2274,44 @@ vos_dtx_cleanup(struct dtx_handle *dth)
 
 	for (i = 0; i < max; i++)
 		vos_obj_evict_by_oid(vos_obj_cache_current(), cont, oids[i]);
+}
+
+int
+vos_dtx_pin(struct dtx_handle *dth)
+{
+	struct vos_container	*cont;
+	struct umem_instance	*umm;
+	int			 rc;
+
+	D_ASSERT(dtx_is_valid_handle(dth));
+	D_ASSERT(dth->dth_ent == NULL);
+
+	if (dth->dth_solo)
+		return 0;
+
+	cont = vos_hdl2cont(dth->dth_coh);
+	D_ASSERT(cont != NULL);
+
+	umm = vos_cont2umm(cont);
+	rc = vos_dtx_alloc(umm, dth);
+	if (rc != 0)
+		goto out;
+
+	rc = umem_tx_begin(umm, NULL);
+	if (rc == 0) {
+		rc = vos_dtx_prepared(dth);
+		rc = umem_tx_end(umm, rc);
+	}
+
+	if (rc != 0)
+		vos_dtx_cleanup_internal(dth);
+
+out:
+	if (rc != 0)
+		D_ERROR("Failed to pin DTX entry for "DF_DTI": "DF_RC"\n",
+			DP_DTI(&dth->dth_xid), DP_RC(rc));
+
+	return rc;
 }
 
 /** Allocate space for saving the vos reservations and deferred actions */

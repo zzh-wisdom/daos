@@ -337,6 +337,9 @@ class TestContainer(TestDaosApiBase):
             self._call_method(self.container.create, kwargs)
 
         elif self.control_method.value == self.USE_DAOS and self.daos:
+            # Disconnect the pool if connected
+            self.pool.disconnect()
+
             # Create a container with the daos command
             kwargs = {
                 "pool": self.pool.uuid,
@@ -464,6 +467,7 @@ class TestContainer(TestDaosApiBase):
         """
         if self.container and not self.opened:
             self.log.info("Opening container %s", self.uuid)
+            self.pool.connect()
             kwargs = {}
             kwargs["poh"] = pool_handle
             kwargs["cuuid"] = container_uuid
@@ -513,6 +517,9 @@ class TestContainer(TestDaosApiBase):
                     status = True
 
                 elif self.control_method.value == self.USE_DAOS and self.daos:
+                    # Disconnect the pool if connected
+                    self.pool.disconnect()
+
                     # Destroy the container with the daos command
                     kwargs["pool"] = self.pool.uuid
                     kwargs["sys_name"] = self.pool.name.value
