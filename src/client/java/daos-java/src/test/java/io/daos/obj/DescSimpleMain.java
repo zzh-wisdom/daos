@@ -38,30 +38,46 @@ public class DescSimpleMain {
       reduces = DEFAULT_NUMBER_OF_REDUCES;
     }
 
+    int sizeLimit = 2 * 1024 * 1024;
+    int nbrOfDkeys = reduces;
+    int offset = 0;
+    if (args.length >= 9) {
+      sizeLimit = Integer.valueOf(args[8]);
+    }
+    if (args.length >= 11) {
+      offset = Integer.valueOf(args[9]);
+      nbrOfDkeys = Integer.valueOf(args[10]);
+    }
+
+    int threads = 1;
+    if (args.length >= 12) {
+      threads = Integer.valueOf(args[11]);
+    }
+
     DaosObjClient objClient = null;
     DaosObject object = null;
     try {
       objClient = getObjClient(poolId, containerId, svc);
       object = openObject(objClient, oid);
-      if ("generate".equalsIgnoreCase(op)) {
-        generateData(object, totalBytes, maps, reduces);
+      if (op.toLowerCase().startsWith("write")) {
+        if (op.equalsIgnoreCase("write")) {
+          write(object, totalBytes, maps, reduces, sizeLimit, offset, nbrOfDkeys, true);
+        } else if (op.equalsIgnoreCase("write-threads")) {
+          writeThreads(object, totalBytes, maps, reduces, sizeLimit, offset, nbrOfDkeys, threads);
+        } else {
+          System.out.println("unknown write operation: " + op);
+        }
       } else if (op.toLowerCase().startsWith("read")) {
-        int sizeLimit = 2 * 1024 * 1024;
-        int nbrOfDkeys = reduces;
-        int offset = 0;
-        if (args.length >= 9) {
-          sizeLimit = Integer.valueOf(args[8]);
-        }
-        if (args.length >= 11) {
-          offset = Integer.valueOf(args[9]);
-          nbrOfDkeys = Integer.valueOf(args[10]);
-        }
         if (op.equalsIgnoreCase("read")) {
           read(object, totalBytes, maps, reduces, sizeLimit, offset, nbrOfDkeys, true);
         } else if (op.equalsIgnoreCase("read-threads")) {
           readThreads(object, totalBytes, maps, reduces, sizeLimit, offset, nbrOfDkeys,
-            args.length >= 12 ? Integer.valueOf(args[11]) : 1);
+            threads);
+        } else {
+          System.out.println("unknown read operation: " + op);
         }
+      } else {
+        System.out.println("unknown operation: " + op);
       }
     } finally {
       if (objClient != null) {
@@ -74,6 +90,34 @@ public class DescSimpleMain {
     }
   }
 
+  private static void writeThreads(DaosObject object, long totalBytes, int maps, int reduces,
+                                   int sizeLimit, int offset, int nbrOfDkeys, int threads) throws Exception {
+    int ext = nbrOfDkeys/threads;
+    if (nbrOfDkeys%threads != 0) {
+      throw new IOException("nbrOfDkeys: " + nbrOfDkeys +", should be a multiple of threads " + threads);
+    }
+    ExecutorService exe = Executors.newFixedThreadPool(threads);
+    List<WriteTask> tasks = new ArrayList<>();
+    for (int i = offset; i < offset + nbrOfDkeys; i+=ext) {
+      tasks.add(new WriteTask(object, totalBytes, maps, reduces, sizeLimit, i, ext));
+    }
+    try {
+      List<Future<Float>> rstList = new ArrayList<>();
+      for (int i = 0; i < threads; i++) {
+        rstList.add(exe.submit(tasks.get(i)));
+      }
+      float total = 0.0f;
+      for (Future<Float> f : rstList) {
+        total += f.get();
+      }
+      System.out.println("perf: " + total);
+      exe.shutdownNow();
+      exe.awaitTermination(2, TimeUnit.SECONDS);
+    } finally {
+      DaosEventQueue.destroyAll();
+    }
+  }
+
   private static byte[] generateDataArray(int dataSize) {
     byte[] bytes = new byte[dataSize];
     for (int i = 0; i < dataSize; i++) {
@@ -82,12 +126,25 @@ public class DescSimpleMain {
     return bytes;
   }
 
-  private static void generateData(DaosObject object, long totalBytes, int maps, int reduces) throws IOException, InterruptedException {
+  private static float write(DaosObject object, long totalBytes, int maps, int reduces,
+                                   int sizeLimit, int offset, int nbrOfDkeys, boolean destroy)
+      throws IOException, InterruptedException {
     int akeyValLen = (int)(totalBytes/maps/reduces);
 //    ByteBuf buf = BufferAllocator.objBufWithNativeOrder(akeyValLen);
 //    IOSimpleDataDesc desc = object.createSimpleDataDesc(3, 1, akeyValLen,
 //         null);
     System.out.println("block size: " + akeyValLen);
+    if (offset < 0 || offset >= reduces) {
+      throw new IOException("offset should be no less than 0 and less than reduces: " + reduces +", offset: " + offset);
+    }
+    if (nbrOfDkeys <= 0) {
+      throw new IOException("number of dkeys should be more than 0, " + nbrOfDkeys);
+    }
+    int end = nbrOfDkeys + offset;
+    if (end > reduces) {
+      throw new IOException("offset + nbrOfDkeys should not exceed reduces. " + (nbrOfDkeys + offset) + " > " + reduces);
+    }
+
     byte[] data = generateDataArray(akeyValLen);
     DaosEventQueue dq = DaosEventQueue.getInstance(128, 4, 1, akeyValLen);
     for (int i = 0; i < dq.getNbrOfEvents(); i++) {
@@ -103,7 +160,7 @@ public class DescSimpleMain {
     List<IOSimpleDataDesc> compList = new LinkedList<>();
     long start = System.nanoTime();
     try {
-      for (int i = 0; i < reduces; i++) {
+      for (int i = offset; i < end; i++) {
         for (int j = 0; j < maps; j++) {
           compList.clear();
           e = dq.acquireEventBlock(true, 1000, compList);
@@ -129,12 +186,16 @@ public class DescSimpleMain {
         }
       }
       float seconds = ((float)(System.nanoTime()-start))/1000000000;
-      long expected = 1L*akeyValLen*reduces*maps;
-      System.out.println("perf (MB/s): " + ((float)expected)/seconds/1024/1024);
+      long expected = 1L*akeyValLen*nbrOfDkeys*maps;
+      float rst = ((float)expected)/seconds/1024/1024;
+      System.out.println("perf (MB/s): " + rst);
       System.out.println("total read (MB): " + expected/1024/1024);
       System.out.println("seconds: " + seconds);
+      return rst;
     } finally {
-      DaosEventQueue.destroyAll();
+      if (destroy) {
+        DaosEventQueue.destroyAll();
+      }
     }
   }
 
@@ -148,6 +209,33 @@ public class DescSimpleMain {
       }
     }
     return sb.toString();
+  }
+
+  static class WriteTask implements Callable<Float> {
+
+    private DaosObject object;
+    private long totalBytes;
+    private final int maps;
+    private final int reduces;
+    private int sizeLimit;
+    private final int offset;
+    private final int nbrOfDkeys;
+
+    public WriteTask(DaosObject object, long totalBytes, int maps, int reduces,
+                    int sizeLimit, int offset, int nbrOfDkeys){
+      this.object = object;
+      this.totalBytes = totalBytes;
+      this.maps = maps;
+      this.reduces = reduces;
+
+      this.sizeLimit = sizeLimit;
+      this.offset = offset;
+      this.nbrOfDkeys = nbrOfDkeys;
+    }
+    @Override
+    public Float call() throws Exception {
+      return write(object, totalBytes, maps, reduces, sizeLimit, offset, nbrOfDkeys, false);
+    }
   }
 
   static class ReadTask implements Callable<Float> {
@@ -203,7 +291,6 @@ public class DescSimpleMain {
     } finally {
       DaosEventQueue.destroyAll();
     }
-
   }
 
   private static float read(DaosObject object, long totalBytes, int maps, int reduces,
