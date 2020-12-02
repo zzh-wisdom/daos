@@ -22,15 +22,15 @@
   portions thereof marked with this legend must also reproduce the markings.
 '''
 from data_mover_test_base import DataMoverTestBase
-from os.path import join, sep
+from os.path import join
 
 
 class CopyProcsTest(DataMoverTestBase):
     # pylint: disable=too-many-ancestors
-    """Test class for Datamover multiple processes.
+    """Test class for POSIX DataMover multiple processes.
 
     Test Class Description:
-        Tests multi-process (rank) copying of the datamover utility.
+        Tests multi-process (rank) copying of the POSIX DataMover utility.
         Tests the following cases:
             Copying with varying numbers of processes (ranks).
 
@@ -43,27 +43,14 @@ class CopyProcsTest(DataMoverTestBase):
         super(CopyProcsTest, self).setUp()
 
         # Get the parameters
-        self.test_file = self.params.get(
-            "test_file", "/run/ior/*")
-        self.flags_write = self.params.get(
-            "flags_write", "/run/ior/copy_procs/*")
-        self.flags_read = self.params.get(
-            "flags_read", "/run/ior/copy_procs/*")
-
-        # Setup the directory structures
-        self.posix_test_paths.append(join(self.workdir, "posix_test") + sep)
-        self.posix_test_paths.append(join(self.workdir, "posix_test2") + sep)
-        self.posix_test_file = join(self.posix_test_paths[0], self.test_file)
-        self.posix_test_file2 = join(self.posix_test_paths[1], self.test_file)
-        self.daos_test_file = join("/", self.test_file)
-
-        # Create the directories
-        cmd = "mkdir -p {}".format(self.get_posix_test_path_string())
-        self.execute_cmd(cmd)
+        self.test_file = self.ior_cmd.test_file.value
+        self.ior_flags = self.params.get(
+            "ior_flags", "/run/ior/*")
 
     def test_copy_procs(self):
         """
         Test Description:
+            Tests POSIX copy with multiple processes.
             DAOS-5659: Verify multi-process (rank) copying.
         Use Cases:
             Create pool.
@@ -71,7 +58,8 @@ class CopyProcsTest(DataMoverTestBase):
             Create a single 100M file in container1 using ior.
         :avocado: tags=all,daily_regression
         :avocado: tags=small,hw
-        :avocado: tags=copy_procs,datamover
+        :avocado: tags=datamover,dcp
+        :avocado: tags=copy_procs
         """
         # Create pool and containers
         pool1 = self.create_pool()
@@ -80,38 +68,48 @@ class CopyProcsTest(DataMoverTestBase):
 
         # Get the varying number of processes
         procs_list = self.params.get(
-            "processes", "/run/datamover/copy_procs/*")
+            "processes", "/run/dcp/copy_procs/*")
+
+        # Generate test file paths
+        src_daos = join("/", self.test_file)
+        dst_daos = join("/", self.test_file)
+        src_posix = join(self.new_posix_test_path(), self.test_file)
+        dst_posix = join(self.new_posix_test_path(), self.test_file)
 
         # Create the test files
-        self.set_ior_location_and_run("DAOS_UUID", self.daos_test_file,
-                                      pool1, container1,
-                                      flags=self.flags_write)
-        self.set_ior_location_and_run("POSIX", self.posix_test_file,
-                                      flags=self.flags_write)
+        self.run_ior_with_params("DAOS", src_daos,
+                                 pool1, container1,
+                                 flags=self.ior_flags[0])
+        self.run_ior_with_params("POSIX", src_posix,
+                                 flags=self.ior_flags[0])
 
         # DAOS -> POSIX
         # Run with varying number of processes
-        self.set_src_location("DAOS_UUID", "/", pool1, container1)
-        self.set_dst_location("POSIX", self.posix_test_paths[1])
+        self.set_datamover_params(
+            "DAOS_UUID", src_daos, pool1, container1,
+            "POSIX", dst_posix)
         for num_procs in procs_list:
             test_desc = "copy_procs (DAOS->POSIX with {} procs)".format(
                 num_procs)
             self.run_datamover(
                 test_desc=test_desc,
+                set_params=False,
                 processes=num_procs)
-            self.set_ior_location_and_run("POSIX", self.posix_test_file2,
-                                          flags=self.flags_read)
+            self.run_ior_with_params(
+                "POSIX", dst_posix, flags=self.ior_flags[1])
 
         # POSIX -> DAOS
         # Run with varying number of processes
-        self.set_src_location("POSIX", self.posix_test_paths[0])
-        self.set_dst_location("DAOS_UUID", "/", pool1, container2)
+        self.set_datamover_params(
+            "POSIX", src_posix, None, None,
+            "DAOS_UUID", dst_daos, pool1, container2)
         for num_procs in procs_list:
-            test_desc = "copy_procs (POSIX->DAOS with {} processes)".format(
+            test_desc = "copy_procs (POSIX->DAOS with {} procs)".format(
                 num_procs)
             self.run_datamover(
                 test_desc=test_desc,
+                set_params=False,
                 processes=num_procs)
-            self.set_ior_location_and_run("DAOS_UUID", self.daos_test_file,
-                                          pool1, container2,
-                                          flags=self.flags_read)
+            self.run_ior_with_params(
+                "DAOS_UUID", dst_daos, pool1, container2,
+                flags=self.ior_flags[1])
