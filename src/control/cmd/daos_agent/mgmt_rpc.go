@@ -150,6 +150,7 @@ func (mod *mgmtModule) handleGetAttachInfo(ctx context.Context, reqb []byte, pid
 
 	resp, err := control.GetAttachInfo(ctx, mod.ctlInvoker, &control.GetAttachInfoReq{
 		System: pbReq.Sys,
+		AllRanks: pbReq.AllRanks,
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "GetAttachInfo %+v", pbReq)
