@@ -3078,7 +3078,7 @@ tgt_idx_change_retry(void **state)
 		assert_int_equal(layout->ol_shards[0]->os_replica_nr, 3);
 		/* FIXME disable rank compare until we fix the layout_get */
 		/* assert_int_equal(layout->ol_shards[0]->os_ranks[0], 2); */
-		rank = layout->ol_shards[0]->os_ranks[replica];
+		rank = layout->ol_shards[0]->os_shard_loc[replica].sd_rank;
 		rc = daos_obj_layout_free(layout);
 		assert_int_equal(rc, 0);
 
@@ -3104,7 +3104,8 @@ tgt_idx_change_retry(void **state)
 		 *		     rank);
 		*/
 		print_message("target of shard %d changed from %d to %d\n",
-			      replica, rank, layout->ol_shards[0]->os_ranks[0]);
+			      replica, rank,
+			      layout->ol_shards[0]->os_shard_loc[0].sd_rank);
 		rc = daos_obj_layout_free(layout);
 		assert_int_equal(rc, 0);
 	}
