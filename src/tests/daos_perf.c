@@ -1499,7 +1499,7 @@ The options are as follows:\n\
 	and 64. The utility runs in synchronous mode if credits is set to 0.\n\
 	This option is ignored for mode 'vos'.\n\
 \n\
--c TINY|LARGE|R2S|R3S|R4S|EC2P1|EC2P2|EC4P2|EC8P2\n\
+-c TINY|LARGE|R2S|R3S|R4S|EC2P1|EC2P2|EC4P2|EC4P1|EC8P2\n\
 	Object class for DAOS full stack test.\n\
 \n\
 -o number\n\
@@ -1713,6 +1713,8 @@ main(int argc, char **argv)
 				ts_class = OC_EC_2P2G1;
 			} else if (!strcasecmp(optarg, "EC4P2")) {
 				ts_class = OC_EC_4P2G1;
+                        } else if (!strcasecmp(optarg, "EC4P1")) {
+                                ts_class = OC_EC_4P1G1;
 			} else if (!strcasecmp(optarg, "EC8P2")) {
 				ts_class = OC_EC_8P2G1;
 			} else {

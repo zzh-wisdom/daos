@@ -749,10 +749,18 @@ dc_rw_cb(tse_task_t *task, void *arg)
 			D_DEBUG(DB_IO, DF_UOID" size "DF_U64
 				" eph "DF_U64"\n", DP_UOID(orw->orw_oid),
 				sizes[i], orw->orw_epoch);
-			if (!is_ec_obj || reasb_req->orr_fail == NULL ||
-			    iods[i].iod_size == 0 || sizes[i] != 0)
+			if (!is_ec_obj) {
 				iods[i].iod_size = sizes[i];
-			if ((is_ec_obj && reasb_req->orr_recov) &&
+				continue;
+			}
+
+			if (reasb_req->orr_fail == NULL &&
+			    (!reasb_req->orr_size_set || iods[i].iod_size == 0)) {
+				iods[i].iod_size = sizes[i];
+				reasb_req->orr_size_set = 1;
+			}
+
+			if (reasb_req->orr_recov &&
 			    (reasb_req->orr_fail->efi_uiods[i].iod_size == 0 ||
 			     sizes[i] != 0))
 				reasb_req->orr_fail->efi_uiods[i].iod_size =
