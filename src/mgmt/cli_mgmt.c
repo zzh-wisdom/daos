@@ -548,8 +548,6 @@ attach_group(const char *name, int npsrs, struct dc_mgmt_psr *psrs,
 {
 	crt_group_t    *group;
 	int		i;
-	int		i_psr;
-	bool		rand_psr = false;
 	int		rc;
 
 	rc = crt_group_view_create((char *)name, &group);
@@ -558,12 +556,6 @@ attach_group(const char *name, int npsrs, struct dc_mgmt_psr *psrs,
 			DP_RC(rc));
 		goto err;
 	}
-
-	d_getenv_bool("RAND_PSR", &rand_psr);
-	if (rand_psr)
-		i_psr = npsrs * ((rand() - 1) / (float)RAND_MAX);
-	else
-		i_psr = 0;
 
 	D_INFO("adding %d ranks\n", npsrs);
 	for (i = 0; i < npsrs; i++) {
@@ -577,7 +569,7 @@ attach_group(const char *name, int npsrs, struct dc_mgmt_psr *psrs,
 		}
 
                 /* crt can take only one PSR at the moment. */
-                if (i == i_psr) {
+                if (psrs[i].rank == 0) {
                        D_INFO("setting rank %u (%s) as PSR\n", psrs[i].rank,
                               psrs[i].uri);
                        rc = crt_group_psr_set(group, psrs[i].rank);
@@ -868,7 +860,7 @@ dc_mgmt_get_pool_svc_ranks(struct dc_mgmt_sys *sys, const uuid_t puuid,
 
 	/* TODO: when MS supports multiple replicas search for leader */
 	srv_ep.ep_grp = sys->sy_group;
-	srv_ep.ep_rank = sys->sy_psrs[0].rank;
+	srv_ep.ep_rank = 0;
 	srv_ep.ep_tag = daos_rpc_tag(DAOS_REQ_MGMT, 0);
 	opc = DAOS_RPC_OPCODE(MGMT_POOL_GET_SVCRANKS, DAOS_MGMT_MODULE,
 			      DAOS_MGMT_VERSION);
