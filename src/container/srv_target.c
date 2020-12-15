@@ -60,7 +60,7 @@
  *
  * current HLC - (DTX batched commit threshold + buffer period)
  */
-#define DAOS_AGG_THRESHOLD	(DTX_COMMIT_THRESHOLD_AGE + 10) /* seconds */
+#define DAOS_AGG_THRESHOLD	(DTX_COMMIT_THRESHOLD_AGE + 25) /* 35 seconds,  > 30 seconds CRT timeout */
 
 static inline int
 cont_aggregate_epr(struct ds_cont_child *cont, daos_epoch_range_t *epr)
