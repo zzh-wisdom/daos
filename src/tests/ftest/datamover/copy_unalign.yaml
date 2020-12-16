@@ -1,0 +1,30 @@
+hosts:
+    test_servers:
+        - server-A
+    test_clients:
+        - server-B
+timeout: 300
+server_config:
+    name: daos_server
+pool:
+    mode: 146
+    name: daos_server
+    scm_size: 1G
+    control_method: dmg
+container:
+    type: POSIX
+    control_method: daos
+ior:
+    api: 'DFS'
+    client_processes:
+        np: 1
+    test_file_list:
+        - ["testFile_pagesize_plus_16", "{} + 16"]
+        - ["testFile_2pagesize_minus_16", "{}*2 - 16"]
+        - ["testFile_2pagesize_plus_16", "{}*2 + 16"]
+    ior_flags:
+        - "-v -w -k" # write
+        - "-v -r -R" # read-verify
+    signature: 5
+datamover:
+    processes: 1
