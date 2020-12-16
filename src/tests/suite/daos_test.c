@@ -117,7 +117,8 @@ run_specified_tests(const char *tests, int rank, int size,
 			daos_test_print(rank, "\n\n=================");
 			daos_test_print(rank, "DAOS management tests..");
 			daos_test_print(rank, "=====================");
-			nr_failed = run_daos_mgmt_test(rank, size);
+			nr_failed = run_daos_mgmt_test(rank, size, sub_tests,
+						       sub_tests_size);
 			break;
 		case 'p':
 			daos_test_print(rank, "\n\n=================");
@@ -336,7 +337,7 @@ main(int argc, char **argv)
 		{"io",		no_argument,		NULL,	'i'},
 		{"checksum",	no_argument,		NULL,	'z'},
 		{"agg_ec",	no_argument,		NULL,	'Z'},
-		{"dedup",	no_argument,		NULL,	'u'},
+		{"dedup",	no_argument,		NULL,	'U'},
 		{"epoch_io",	no_argument,		NULL,	'x'},
 		{"obj_array",	no_argument,		NULL,	'A'},
 		{"array",	no_argument,		NULL,	'D'},
@@ -381,7 +382,7 @@ main(int argc, char **argv)
 
 	while ((opt =
 		getopt_long(argc, argv,
-			    "ampcCdtTVizZxADKeoROg:n:s:u:E:f:w:W:hrNvbSXl:",
+			    "ampcCdtTVizUZxADKeoROg:n:s:u:E:f:w:W:hrNvbSXl:",
 			     long_options, &index)) != -1) {
 		if (strchr(all_tests_defined, opt) != NULL) {
 			tests[ntests] = opt;
