@@ -1027,8 +1027,6 @@ crt_ivf_bulk_transfer(struct crt_ivns_internal *ivns_internal,
 	/* crt_req_decref done in crt_ivf_bulk_transfer_done_cb */
 	RPC_PUB_ADDREF(rpc);
 
-	memset(&bulk_desc, 0x0, sizeof(struct crt_bulk_desc));
-
 	bulk_desc.bd_rpc = rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
 	bulk_desc.bd_remote_hdl = dest_bulk;
@@ -1816,11 +1814,12 @@ exit:
 
 		if (put_needed)
 			iv_ops->ivo_on_put(ivns, iv_value, user_priv);
-		D_ERROR("Failed to issue IV fetch; rc = %d\n", rc);
+		D_ERROR("Failed to issue IV fetch; rc = " DF_RC "\n",
+			DP_RC(rc));
 
 		if (cb_info) {
 			IVNS_DECREF(cb_info->ifc_ivns_internal);
-			D_FREE_PTR(cb_info);
+			D_FREE(cb_info);
 		}
 	}
 
@@ -2393,6 +2392,7 @@ crt_ivsync_rpc_issue(struct crt_ivns_internal *ivns_internal, uint32_t class_id,
 		/* Copy iv_key over as it will get destroyed after this call */
 		D_ALLOC(iv_sync_cb->isc_iv_key.iov_buf, iv_key->iov_buf_len);
 		if (iv_sync_cb->isc_iv_key.iov_buf == NULL) {
+			/* avoid checkpatch warning */
 			D_GOTO(exit, rc = -DER_NOMEM);
 			}
 
@@ -2673,7 +2673,6 @@ handle_ivupdate_response(const struct crt_cb_info *cb_info)
 	D_FREE_PTR(iv_info);
 exit:
 	DBG_EXIT();
-	return;
 }
 
 /* Helper function to issue IV UPDATE RPC*/

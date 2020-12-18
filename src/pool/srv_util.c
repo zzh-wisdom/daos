@@ -76,7 +76,8 @@ map_ranks_init(const struct pool_map *map, enum map_ranks_class class,
 	}
 
 	if (n == 0) {
-		memset(ranks, 0, sizeof(*ranks));
+		ranks->rl_nr = 0;
+		ranks->rl_ranks = NULL;
 		return 0;
 	}
 
@@ -321,7 +322,7 @@ update_one_tgt(struct pool_map *map, struct pool_target *target,
 				target->ta_comp.co_rank,
 				target->ta_comp.co_index, map);
 			target->ta_comp.co_status = PO_COMP_ST_UP;
-			target->ta_comp.co_fseq = ++(*version);
+			++(*version);
 
 			D_PRINT("Target (rank %u idx %u) start reintegration\n",
 				target->ta_comp.co_rank,
@@ -405,8 +406,9 @@ update_one_tgt(struct pool_map *map, struct pool_target *target,
  * changes have been made.
  */
 int
-ds_pool_map_tgts_update(struct pool_map *map, struct pool_target_id_list *tgts,
-			int opc, bool evict_rank)
+ds_pool_map_tgts_update(struct pool_map *map,
+			struct pool_target_id_list *tgts, int opc,
+			bool evict_rank, uint32_t *tgt_map_ver)
 {
 	uint32_t	version;
 	int		i;
@@ -415,6 +417,9 @@ ds_pool_map_tgts_update(struct pool_map *map, struct pool_target_id_list *tgts,
 	D_ASSERT(tgts != NULL);
 
 	version = pool_map_get_version(map);
+	if (tgt_map_ver != NULL)
+		*tgt_map_ver = version;
+
 	for (i = 0; i < tgts->pti_number; i++) {
 		struct pool_target	*target = NULL;
 		struct pool_domain	*dom = NULL;
@@ -439,6 +444,9 @@ ds_pool_map_tgts_update(struct pool_map *map, struct pool_target_id_list *tgts,
 		if (rc != 0)
 			return rc;
 
+		if (tgt_map_ver != NULL && *tgt_map_ver < version)
+			*tgt_map_ver = version;
+
 		if (evict_rank &&
 		    !(dom->do_comp.co_status & (PO_COMP_ST_DOWN |
 						PO_COMP_ST_DOWNOUT)) &&
@@ -456,6 +464,13 @@ ds_pool_map_tgts_update(struct pool_map *map, struct pool_target_id_list *tgts,
 			version++;
 		}
 	}
+
+	/* If no target is being changed, let's reset the tgt_map_ver to 0,
+	 * so related ULT like rebuild/reintegrate/drain will not be scheduled.
+	 */
+	if (tgt_map_ver != NULL && *tgt_map_ver == pool_map_get_version(map))
+		*tgt_map_ver = 0;
+
 	/* Set the version only if actual changes have been made. */
 	if (version > pool_map_get_version(map)) {
 		D_DEBUG(DF_DSMS, "generating map %p version %u:\n",
@@ -515,9 +530,12 @@ ds_pool_check_failed_replicas(struct pool_map *map, d_rank_list_t *replicas,
 		++nfailed;
 	}
 
+	failed->rl_nr = 0;
+	failed->rl_ranks = NULL;
+
 	if (nfailed == 0) {
-		memset(failed, 0, sizeof(*failed));
-		memset(alt, 0, sizeof(*alt));
+		alt->rl_nr = 0;
+		alt->rl_ranks = NULL;
 		return 0;
 	}
 
@@ -526,7 +544,6 @@ ds_pool_check_failed_replicas(struct pool_map *map, d_rank_list_t *replicas,
 	alt->rl_ranks = replicas->rl_ranks + (replicas->rl_nr - nfailed);
 
 	/** Copy failed ranks to make room for replacements **/
-	memset(failed, 0, sizeof(*failed));
 	rc = daos_rank_list_copy(failed, alt);
 	if (rc != 0)
 		return rc;

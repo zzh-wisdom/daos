@@ -24,13 +24,13 @@
 package server
 
 import (
-	"context"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/daos-stack/daos/src/control/drpc"
 	"github.com/daos-stack/daos/src/control/lib/atm"
@@ -181,19 +181,22 @@ func newTestIOServer(log logging.Logger, isAP bool, ioCfg ...*ioserver.Config) *
 		Running: atm.NewBool(true),
 	}, ioCfg[0])
 
-	var msCfg mgmtSvcClientCfg
-	if isAP {
-		msCfg.AccessPoints = append(msCfg.AccessPoints, "localhost")
-	}
-
-	srv := NewIOServerInstance(log, nil, nil, newMgmtSvcClient(context.TODO(), log, msCfg), r)
+	srv := NewIOServerInstance(log, nil, nil, nil, r)
 	srv.setSuperblock(&Superblock{
 		Rank: system.NewRankPtr(0),
-		MS:   isAP,
 	})
 	srv.ready.SetTrue()
 
 	return srv
+}
+
+// mockTCPResolver returns successful resolve results for any input.
+func mockTCPResolver(netString string, address string) (*net.TCPAddr, error) {
+	if netString != "tcp" {
+		return nil, errors.Errorf("unexpected network type in test: %s, want 'tcp'", netString)
+	}
+
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 10001}, nil
 }
 
 // newTestMgmtSvc creates a mgmtSvc that contains an IOServerInstance
@@ -207,8 +210,8 @@ func newTestMgmtSvc(t *testing.T, log logging.Logger) *mgmtSvc {
 	}
 	harness.started.SetTrue()
 
-	db := system.MockDatabase(t, log)
-	return newMgmtSvc(harness, system.NewMembership(log, db), db)
+	ms, db := system.MockMembership(t, log, mockTCPResolver)
+	return newMgmtSvc(harness, ms, db)
 }
 
 // newTestMgmtSvcMulti creates a mgmtSvc that contains the requested
@@ -234,13 +237,6 @@ func newTestMgmtSvcMulti(t *testing.T, log logging.Logger, count int, isAP bool)
 // fail if operations expect it to be a replica.
 func newTestMgmtSvcNonReplica(t *testing.T, log logging.Logger) *mgmtSvc {
 	svc := newTestMgmtSvc(t, log)
-
-	// Doesn't actually start anything, just clears the replica.
-	ctx, cancel := context.WithCancel(context.Background())
-	if err := svc.sysdb.Start(ctx, &net.TCPAddr{}); err != nil {
-		t.Fatal(err)
-	}
-	cancel()
-
+	svc.sysdb = system.MockDatabaseWithAddr(t, log, nil)
 	return svc
 }
