@@ -161,6 +161,8 @@ class DaosCommandBase(CommandWithSubCommand):
             """Get the dmg network sub command object."""
             if self.sub_command.value == "create":
                 self.sub_command_class = self.CreateSubCommand()
+            elif self.sub_command.value == "copy":
+                self.sub_command_class = self.CopySubCommand()
             elif self.sub_command.value == "destroy":
                 self.sub_command_class = self.DestroySubCommand()
             elif self.sub_command.value == "list-objects":
@@ -259,6 +261,17 @@ class DaosCommandBase(CommandWithSubCommand):
                 #   --acl-file=PATH
                 #           input file containing ACL
                 self.acl_file = FormattedParameter("--acl-file={}", None)
+
+        class CopySubCommand(CommonContainerSubCommand):
+            """Defines an object for the daos container copy command."""
+
+            def __init__(self):
+                """Create a daos container copy command object."""
+                super(
+                    DaosCommandBase.ContainerSubCommand.CopySubCommand,
+                    self).__init__("copy")
+                self.src = FormattedParameter("--dst={}")
+                self.dst = FormattedParameter("--dst={}")
 
         class DestroySubCommand(CommonContainerSubCommand):
             """Defines an object for the daos container destroy command."""

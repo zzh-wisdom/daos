@@ -166,3 +166,52 @@ class Dcp(DcpCommand):
         out = mpirun.run()
 
         return out
+
+class ContCopy():
+    """Class defining an object of type ContCopy.
+       Allows interfacing with daos cont copy in a similar
+       manner to DcpCommand.
+    """
+
+    def __init__(self, daos_cmd, log):
+        """Create a ContCopy object.
+
+        Args:
+            daos_cmd (DaosCommand): daos command to issue the filesystem
+                copy command.
+            log (TestLogger): logger to log messages
+
+        """
+        self.src = None
+        self.dst = None
+        self.daos_cmd = daos_cmd
+        self.log = log
+
+    def set_cont_copy_params(self, src=None, dst=None):
+        """Set the daos cont copy params.
+
+        Args:
+            src (str, optional): the src
+            dst (str, optional): the dst
+
+        """
+        if src:
+            self.src = src
+        if dst:
+            self.dst = dst
+
+    def run(self):
+        # pylint: disable=arguments-differ
+        """Run the daos cont copy command.
+
+        Returns:
+            CmdResult: Object that contains exit status, stdout, and other
+                information.
+
+        Raises:
+            CommandFailure: In case daos cont copy run command fails
+
+        """
+        self.log.info("Starting daos container copy")
+
+        return self.daos_cmd.container_copy(src=self.src, dst=self.dst)

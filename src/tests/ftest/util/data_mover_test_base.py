@@ -27,7 +27,7 @@ from test_utils_pool import TestPool
 from test_utils_container import TestContainer
 from ior_test_base import IorTestBase
 from mdtest_test_base import MdtestBase
-from data_mover_utils import Dcp
+from data_mover_utils import Dcp, ContCopy
 from os.path import join, sep
 import uuid
 
@@ -57,7 +57,7 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
     PARAM_TYPES = ("POSIX", "DAOS_UUID", "DAOS_UNS")
 
     # The valid datamover tools that can be used
-    TOOLS = ("DCP")
+    TOOLS = ("DCP", "CONT_COPY")
 
     def __init__(self, *args, **kwargs):
         """Initialize a DataMoverTestBase object."""
@@ -65,6 +65,7 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
         self.tool = None
         self.daos_cmd = None
         self.dcp_cmd = None
+        self.cont_copy_cmd = None
         self.ior_processes = None
         self.mdtest_processes = None
         self.dcp_processes = None
@@ -319,6 +320,8 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
         Called by run_datamover if params are passed."""
         if self.tool == "DCP":
             self.set_dcp_params(*args, **kwargs)
+        elif self.tool == "CONT_COPY":
+            self.set_cont_copy_params(*args, **kwargs)
         else:
             self.fail("Invalid tool: {}".format(str(self.tool)))
 
@@ -457,6 +460,41 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
                 self.ior_cmd.set_daos_params(self.server_group,
                                              pool, None)
 
+    def set_cont_copy_params(self,
+                             src_pool=None, src_cont=None,
+                             dst_pool=None, dst_cont=None):
+        """Set the params for cont copy.
+
+        This only supports DAOS -> DAOS copies.
+
+        Args:
+            src_pool (TestPool, optional): the source pool.
+                Alternatively, this can the pool uuid.
+            src_cont (TestContainer, optional): the source container.
+                Alternatively, this can be the container uuid.
+            dst_pool (TestPool, optional): the destination pool.
+                Alternatively, this can the pool uuid.
+            dst_cont (TestContainer, optional): the destination container.
+                Alternatively, this can be the container uuid.
+
+        """
+        # First, initialize a new cont copy command
+        self.cont_copy_cmd = ContCopy(self.daos_cmd, self.log)
+
+        # Set the source params
+        if src_pool or src_cont:
+             pool_uuid = self._uuid_from_obj(src_pool)
+             cont_uuid = self._uuid_from_obj(src_cont)
+             self.cont_copy_cmd.set_cont_copy_params(
+                src="{}/{}".format(pool_uuid, cont_uuid))
+
+        # Set the destination params
+        if dst_pool or dst_cont:
+             pool_uuid = self._uuid_from_obj(dst_pool)
+             cont_uuid = self._uuid_from_obj(dst_cont)
+             self.cont_copy_cmd.set_cont_copy_params(
+                dst="{}/{}".format(pool_uuid, cont_uuid))
+
     def run_ior_with_params(self, param_type, path, pool=None, cont=None,
                             path_suffix=None, flags=None, display=True):
         """Set the ior params and run ior.
@@ -594,6 +632,8 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
                 # If we expect an rc other than 0, don't fail
                 self.dcp_cmd.exit_status_exception = (expected_rc == 0)
                 result = self.dcp_cmd.run(self.workdir, processes)
+            elif self.tool == "CONT_COPY":
+                result = self.cont_copy_cmd.run()
             else:
                 self.fail("Invalid tool: {}".format(str(self.tool)))
         except CommandFailure as error:
