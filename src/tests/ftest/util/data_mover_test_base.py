@@ -54,7 +54,7 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
     """
 
     # The valid parameter types for setting params.
-    PARAM_TYPES = ("POSIX", "DAOS_UUID", "DAOS_UNS")
+    PARAM_TYPES = ("POSIX", "DAOS_UUID", "DAOS_UNS", "DFUSE")
 
     # The valid datamover tools that can be used
     TOOLS = ("DCP")
@@ -391,6 +391,17 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
                     self.dcp_cmd.set_dcp_params(
                         prefix=src_cont.path.value,
                         src_path=src_cont.path.value + src_path)
+        elif src_type == "DFUSE":
+            if not self.dfuse.puuid.value and not src_pool:
+                self.fail("src_type DFUSE requires src_pool")
+            if not self.dfuse.cuuid.value and not src_cont:
+                self.fail("src_type DFUSE requires src_cont")
+            pool_uuid = str(self.uuid_from_obj(src_pool))
+            cont_uuid = str(self.uuid_from_obj(src_cont))
+            path = "{}/{}/{}/{}".format(
+                self.dfuse.mount_dir.value, pool_uuid, cont_uuid, src_path)
+            self.dcp_cmd.set_dcp_params(
+                src_path=path)
 
         # Set the destination params
         if dst_type == "POSIX":
@@ -410,6 +421,17 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
                     self.dcp_cmd.set_dcp_params(
                         prefix=dst_cont.path.value,
                         dst_path=dst_cont.path.value + dst_path)
+        elif dst_type == "DFUSE":
+            if not self.dfuse.puuid.value and not dst_pool:
+                self.fail("dst_type DFUSE requires dst_pool")
+            if not self.dfuse.cuuid.value and not dst_cont:
+                self.fail("dst_type DFUSE requires dst_cont")
+            pool_uuid = str(self.uuid_from_obj(dst_pool))
+            cont_uuid = str(self.uuid_from_obj(dst_cont))
+            path = "{}/{}/{}/{}".format(
+                self.dfuse.mount_dir.value, pool_uuid, cont_uuid, dst_path)
+            self.dcp_cmd.set_dcp_params(
+                dst_path=path)
 
     def set_ior_params(self, param_type, path, pool=None, cont=None,
                        path_suffix=None, flags=None, display=True):
@@ -454,7 +476,7 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
         if param_type == "POSIX":
             self.ior_cmd.api.update("POSIX", display_api)
             self.ior_cmd.test_file.update(path, display_test_file)
-        elif param_type in ("DAOS_UUID", "DAOS_UNS"):
+        elif param_type in ("DAOS_UUID", "DAOS_UNS", "DFUSE"):
             self.ior_cmd.api.update("DFS", display_api)
             self.ior_cmd.test_file.update(path, display_test_file)
             if pool and cont_uuid:

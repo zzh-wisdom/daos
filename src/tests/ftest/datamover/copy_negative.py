@@ -281,12 +281,13 @@ class CopyNegativeTest(DataMoverTestBase):
 
     # TODO why is dmg pool destroy failing now?
     def test_copy_error_check_dcp(self):
-        """Jira ID: DAOS-5515
+        """
         Test Description:
             Tests POSIX copy error checking.
             This uses the dcp tool.
-            (1) Error checking: destination filename is invalid.
-            (2) Error checking: destination pool out of space.
+            DAOS-5515: destination filename is invalid.
+            DAOS-5515: destination pool out of space.
+            DAOS-6387: destination posix out of space.
         :avocado: tags=all,full_regression
         :avocado: tags=datamover,dcp
         :avocado: tags=copy_negative,copy_error_check_dcp
@@ -308,7 +309,7 @@ class CopyNegativeTest(DataMoverTestBase):
             expected_rc=1,
             expected_output=[self.MFU_ERR_DCP_COPY, "errno=36"])
 
-        # Write a large file to POSIX
+        # Write a large source file to POSIX
         block_size_large = self.params.get(
             "block_size_large", "/run/ior/*")
         self.ior_cmd.block_size.update(block_size_large)
@@ -319,5 +320,20 @@ class CopyNegativeTest(DataMoverTestBase):
             "copy_error_check (dst pool out of space)",
             "POSIX", self.posix_test_paths[0], None, None,
             "DAOS_UUID", "/", pool1, container1,
+            expected_rc=1,
+            expected_output=[self.MFU_ERR_DCP_COPY, "errno=28"])
+
+        # Create a second pool and container
+        pool2 = self.create_pool()
+        cont2 = self.create_cont(pool2)
+
+        # Start dfuse
+        self.start_dfuse(self.dfuse_hosts)
+
+        # Try to copy to dfuse (emulated as POSIX)
+        self.run_datamover(
+            "copy_error_check (dst posix out of space)",
+            "POSIX", self.posix_test_paths[0], None, None,
+            "DFUSE", self.daos_test_file, pool2, cont2,
             expected_rc=1,
             expected_output=[self.MFU_ERR_DCP_COPY, "errno=28"])

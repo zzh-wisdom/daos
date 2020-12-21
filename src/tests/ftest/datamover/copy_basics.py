@@ -149,6 +149,11 @@ class CopyBasicsTest(DataMoverTestBase):
             ["DAOS_UNS"] + p2_c3])
 
         copy_list.append([
+            "UUID -> DFUSE (same pool)",
+            ["DAOS_UUID"] + p1_c1,
+            ["DFUSE"] + p1_c2])
+
+        copy_list.append([
             "UUID -> POSIX",
             ["DAOS_UUID"] + p1_c1,
             ["POSIX"] + posix2])
@@ -174,8 +179,33 @@ class CopyBasicsTest(DataMoverTestBase):
             ["DAOS_UNS"] + p2_c3])
 
         copy_list.append([
+            "UNS -> DFUSE (same pool)",
+            ["DAOS_UNS"] + p1_c1,
+            ["DFUSE"] + p1_c2])
+
+        copy_list.append([
             "UNS -> POSIX",
             ["DAOS_UNS"] + p1_c1,
+            ["POSIX"] + posix2])
+
+        copy_list.append([
+            "DFUSE -> UUID (same pool)",
+            ["DFUSE"] + p1_c1,
+            ["DAOS_UUID"] + p1_c2])
+
+        copy_list.append([
+            "DFUSE -> UNS (same pool)",
+            ["DFUSE"] + p1_c1,
+            ["DAOS_UNS"] + p1_c2])
+
+        copy_list.append([
+            "DFUSE -> DFUSE (same pool)",
+            ["DFUSE"] + p1_c1,
+            ["DFUSE"] + p1_c2])
+
+        copy_list.append([
+            "DFUSE -> POSIX",
+            ["DFUSE"] + p1_c1,
             ["POSIX"] + posix2])
 
         copy_list.append([
@@ -187,6 +217,11 @@ class CopyBasicsTest(DataMoverTestBase):
             "POSIX -> UNS",
             ["POSIX"] + posix1,
             ["DAOS_UNS"] + p1_c2])
+
+        copy_list.append([
+            "POSIX -> DFUSE",
+            ["POSIX"] + posix1,
+            ["DFUSE"] + p1_c2])
 
         # Not yet supported
         if self.tool != "FS_COPY":
@@ -201,19 +236,23 @@ class CopyBasicsTest(DataMoverTestBase):
         #   where the path is a directory.
         for (test_desc, src, dst) in copy_list:
             # dir -> dir variation
-            self.run_datamover(
-                test_desc + " (dir->dir)",
-                src[0], src[1], src[2], src[3],
-                dst[0], dst[1], dst[2], dst[3])
+            # Don't run this variation for DFUSE,
+            # since a DFUSE root dir is treated as UNS
+            if not (src[0] == "DFUSE" or dst[0] == "DFUSE"):
+                self.run_datamover(
+                    test_desc + " (dir->dir)",
+                    src[0], src[1], src[2], src[3],
+                    dst[0], dst[1], dst[2], dst[3])
 
-            # The source directory is created IN the destination
-            # so append the directory name to the destination path.
-            self.run_ior_with_params(dst[0], join(dst[1], basename(src[1])),
-                                     dst[2], dst[3],
-                                     self.test_file, self.ior_flags[1])
+                # The source directory is created IN the destination
+                # so append the directory name to the destination path.
+                self.run_ior_with_params(dst[0], join(dst[1], basename(src[1])),
+                                         dst[2], dst[3],
+                                         self.test_file, self.ior_flags[1])
 
             # file -> file variation
-            # A UNS subset is not supported for both src and dst.
+            # Don't run this variation for UNS->UNS,
+            # since a UNS subset is not supported for both src and dst.
             if not (src[0] == "DAOS_UNS" and dst[0] == "DAOS_UNS"):
                 self.run_datamover(
                     test_desc + " (file->file)",
@@ -223,13 +262,15 @@ class CopyBasicsTest(DataMoverTestBase):
                                          self.test_file, self.ior_flags[1])
 
             # file -> dir variation
-            self.run_datamover(
-                test_desc + " (file->dir)",
-                src[0], join(src[1], self.test_file), src[2], src[3],
-                dst[0], dst[1], dst[2], dst[3])
-            self.run_ior_with_params(dst[0], dst[1], dst[2], dst[3],
-                                     self.test_file, self.ior_flags[1])
-
+            # Don't run this variation for DFUSE,
+            # since a DFUSE root dir is treated as UNS
+            if not (src[0] == "DFUSE" or dst[0] == "DFUSE"):
+                self.run_datamover(
+                    test_desc + " (file->dir)",
+                    src[0], join(src[1], self.test_file), src[2], src[3],
+                    dst[0], dst[1], dst[2], dst[3])
+                self.run_ior_with_params(dst[0], dst[1], dst[2], dst[3],
+                                         self.test_file, self.ior_flags[1])
 
     def test_copy_auto_create_dest_dcp(self):
         """
@@ -278,7 +319,8 @@ class CopyBasicsTest(DataMoverTestBase):
         Test Description:
             Tests copying POSIX container subsets.
             Uses the dcp tool.
-            DAOS-5512: Verify ability to copy container subsets
+            DAOS-5512: Verify ability to copy container subsets.
+            DAOS-5997: Verify ability to copy with dfuse paths
         :avocado: tags=all,daily_regression
         :avocado: tags=datamover,dcp
         :avocado: tags=copy_basics,copy_subsets_dcp
@@ -297,6 +339,11 @@ class CopyBasicsTest(DataMoverTestBase):
             Copy depth 2 to a new directory of depth 1, using UUIDS.
             Copy depth 2 to a new directory of depth 2, using UUIDS.
             Repeat, but with UNS paths.
+            Repeat, but with DFUSE paths.
+
+        Note:
+            A UNS subset is not supported on both the source and
+            destination at the same time.
         """
         # Set the tool to use
         self.set_tool(tool)
@@ -337,6 +384,18 @@ class CopyBasicsTest(DataMoverTestBase):
             "copy_subsets (uuid sub_sub_dir to uuid sub_sub_dir)",
             ["DAOS_UUID", sub_sub_dir, pool1, container1],
             ["DAOS_UUID", sub_sub_dir2, pool1, container1]])
+
+        sub_dir2 = self.new_daos_test_path(False)
+        copy_list.append([
+            "copy_subsets (dfuse sub_dir to dfuse sub_dir)",
+            ["DFUSE", sub_dir, pool1, container1],
+            ["DFUSE", sub_dir2, pool1, container1]])
+
+        sub_sub_dir2 = self.new_daos_test_path(False, parent=sub_dir2)
+        copy_list.append([
+            "copy_subsets (dfuse sub_sub_dir to dfuse sub_sub_dir)",
+            ["DFUSE", sub_sub_dir, pool1, container1],
+            ["DFUSE", sub_sub_dir2, pool1, container1]])
 
         # Not yet supported
         if self.tool != "FS_COPY":
