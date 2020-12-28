@@ -27,7 +27,7 @@ from test_utils_pool import TestPool
 from test_utils_container import TestContainer
 from ior_test_base import IorTestBase
 from mdtest_test_base import MdtestBase
-from data_mover_utils import Dcp
+from data_mover_utils import Dcp, Dsync
 from os.path import join, sep
 import uuid
 
@@ -57,7 +57,7 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
     PARAM_TYPES = ("POSIX", "DAOS_UUID", "DAOS_UNS")
 
     # The valid datamover tools that can be used
-    TOOLS = ("DCP")
+    TOOLS = ("DCP", "DSYNC")
 
     def __init__(self, *args, **kwargs):
         """Initialize a DataMoverTestBase object."""
@@ -65,9 +65,11 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
         self.tool = None
         self.daos_cmd = None
         self.dcp_cmd = None
+        self.dsync_cmd = None
         self.ior_processes = None
         self.mdtest_processes = None
         self.dcp_processes = None
+        self.dsync_processes = None
         self.pool = []
         self.container = []
         self.uuids = []
@@ -93,11 +95,14 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
         # Get the parameters for DataMover
         self.dcp_cmd = Dcp(self.hostlist_clients)
         self.dcp_cmd.get_params(self)
+        self.dsync_cmd = Dsync(self.hostlist_clients)
+        self.dsync_cmd.get_params(self)
 
         # Get the processes for each explicitly
         self.ior_processes = self.params.get("np", '/run/ior/client_processes/*')
         self.mdtest_processes = self.params.get("np", '/run/mdtest/client_processes/*')
         self.dcp_processes = self.params.get("np", "/run/dcp/client_processes/*", 1)
+        self.dsync_processes = self.params.get("np", "/run/dsync/client_processes/*", 1)
         tool = self.params.get("tool", "/run/datamover/*")
         if tool:
             self.set_tool(tool)
@@ -326,6 +331,8 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
         """Set the params for self.tool."""
         if self.tool == "DCP":
             self.set_dcp_params(*args, **kwargs)
+        elif self.tool == "DSYNC":
+            self.set_dsync_params(*args, **kwargs)
         else:
             self.fail("Invalid tool: {}".format(str(self.tool)))
 
@@ -408,6 +415,85 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
                         dst_path=dst_cont.path.value)
                 else:
                     self.dcp_cmd.set_dcp_params(
+                        prefix=dst_cont.path.value,
+                        dst_path=dst_cont.path.value + dst_path)
+
+    def set_dsync_params(self,
+                         src_type=None, src_path=None,
+                         src_pool=None, src_cont=None,
+                         dst_type=None, dst_path=None,
+                         dst_pool=None, dst_cont=None):
+        """Set the params for dsync.
+        This is a wrapper for DsyncCommand.set_dsync_params.
+        When both src_type and dst_type are DAOS_UNS, a prefix will
+        only work for either the src or the dst, but not both.
+        Args:
+            src_type (str): how to interpret the src params.
+                Must be in PARAM_TYPES.
+            src_path (str): posix-style source path.
+                For containers, this is relative to the container root.
+            src_pool (TestPool, optional): the source pool.
+                Alternatively, this can the pool uuid.
+            src_cont (TestContainer, optional): the source container.
+                Alternatively, this can be the container uuid.
+            dst_type (str): how to interpret the dst params.
+                Must be in PARAM_TYPES.
+            dst_path (str): posix-style destination path.
+                For containers, this is relative to the container root.
+            dst_pool (TestPool, optional): the destination pool.
+                Alternatively, this can the pool uuid.
+            dst_cont (TestContainer, optional): the destination container.
+                Alternatively, this can be the container uuid.
+        """
+        if src_type is not None:
+            src_type = self.validate_param_type(src_type)
+        if dst_type is not None:
+            dst_type = self.validate_param_type(dst_type)
+
+        if not src_type and (src_path or src_pool or src_cont):
+            self.fail("src params require src_type")
+        if not dst_type and (dst_path or dst_pool or dst_cont):
+            self.fail("dst params require dst_type")
+
+        # First, initialize a new dsync command
+        self.dsync_cmd = Dsync(self.hostlist_clients)
+        self.dsync_cmd.get_params(self)
+
+        # Set the source params
+        if src_type == "POSIX":
+            self.dsync_cmd.set_dsync_params(
+                src_path=src_path)
+        elif src_type == "DAOS_UUID":
+            self.dsync_cmd.set_dsync_params(
+                src_path=src_path,
+                src_pool=self.uuid_from_obj(src_pool),
+                src_cont=self.uuid_from_obj(src_cont))
+        elif src_type == "DAOS_UNS":
+            if src_cont:
+                if src_path == "/":
+                    self.dsync_cmd.set_dsync_params(
+                        src_path=src_cont.path.value)
+                else:
+                    self.dsync_cmd.set_dsync_params(
+                        prefix=src_cont.path.value,
+                        src_path=src_cont.path.value + src_path)
+
+        # Set the destination params
+        if dst_type == "POSIX":
+            self.dsync_cmd.set_dsync_params(
+                dst_path=dst_path)
+        elif dst_type == "DAOS_UUID":
+            self.dsync_cmd.set_dsync_params(
+                dst_path=dst_path,
+                dst_pool=self.uuid_from_obj(dst_pool),
+                dst_cont=self.uuid_from_obj(dst_cont))
+        elif dst_type == "DAOS_UNS":
+            if dst_cont:
+                if dst_path == "/":
+                    self.dsync_cmd.set_dsync_params(
+                        dst_path=dst_cont.path.value)
+                else:
+                    self.dsync_cmd.set_dsync_params(
                         prefix=dst_cont.path.value,
                         dst_path=dst_cont.path.value + dst_path)
 
@@ -601,6 +687,10 @@ class DataMoverTestBase(IorTestBase, MdtestBase):
                 # If we expect an rc other than 0, don't fail
                 self.dcp_cmd.exit_status_exception = (expected_rc == 0)
                 result = self.dcp_cmd.run(self.workdir, processes)
+            elif self.tool == "DSYNC":
+                if not processes:
+                    processes = self.dsync_processes
+                result = self.dsync_cmd.run(self.workdir, processes)
             else:
                 self.fail("Invalid tool: {}".format(str(self.tool)))
         except CommandFailure as error:

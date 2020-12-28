@@ -62,6 +62,18 @@ class CopyBasicsTest(DataMoverTestBase):
         """
         self._copy_types("DCP")
 
+    def test_copy_types_dsync(self):
+        """
+        Test Description:
+             Tests POSIX copy with difference source and destination types.
+             Uses the dsync tool.
+             DAOS-6389: Add basic tests for dsync.
+        :avocado: tags=all,daily_regression
+        :avocado: tags=datamover,dsync
+        :avocado: tags=copy_basics,copy_types_dsync
+        """
+        self._copy_types("DSYNC")
+
     def _copy_types(self, tool):
         """
         Use Cases:
@@ -206,9 +218,13 @@ class CopyBasicsTest(DataMoverTestBase):
                 src[0], src[1], src[2], src[3],
                 dst[0], dst[1], dst[2], dst[3])
 
-            # The source directory is created IN the destination
-            # so append the directory name to the destination path.
-            self.run_ior_with_params(dst[0], join(dst[1], basename(src[1])),
+            if self.tool != "DSYNC":
+                # The source directory is created IN the destination
+                # so append the directory name to the destination path.
+                dst_path = join(dst[1], basename(src[1]))
+            else:
+                dst_path = dst[1]
+            self.run_ior_with_params(dst[0], dst_path,
                                      dst[2], dst[3],
                                      self.test_file, self.ior_flags[1])
 
@@ -223,12 +239,13 @@ class CopyBasicsTest(DataMoverTestBase):
                                          self.test_file, self.ior_flags[1])
 
             # file -> dir variation
-            self.run_datamover(
-                test_desc + " (file->dir)",
-                src[0], join(src[1], self.test_file), src[2], src[3],
-                dst[0], dst[1], dst[2], dst[3])
-            self.run_ior_with_params(dst[0], dst[1], dst[2], dst[3],
-                                     self.test_file, self.ior_flags[1])
+            if self.tool != "DSYNC":
+                self.run_datamover(
+                    test_desc + " (file->dir)",
+                    src[0], join(src[1], self.test_file), src[2], src[3],
+                    dst[0], dst[1], dst[2], dst[3])
+                self.run_ior_with_params(dst[0], dst[1], dst[2], dst[3],
+                                         self.test_file, self.ior_flags[1])
 
 
     def test_copy_auto_create_dest_dcp(self):
@@ -284,6 +301,18 @@ class CopyBasicsTest(DataMoverTestBase):
         :avocado: tags=copy_basics,copy_subsets_dcp
         """
         self._copy_subsets("DCP")
+
+    def test_copy_subsets_dsync(self):
+        """
+        Test Description:
+             Tests copying POSIX container subsets.
+             Uses the dsync tool.
+             DAOS-6389: Add basic tests for dsync.
+        :avocado: tags=all,daily_regression
+        :avocado: tags=datamover,dsync
+        :avocado: tags=copy_basics,copy_subsets_dsync
+        """
+        self._copy_subsets("DSYNC")
 
     def _copy_subsets(self, tool):
         """

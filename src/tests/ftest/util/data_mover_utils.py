@@ -166,3 +166,141 @@ class Dcp(DcpCommand):
         out = mpirun.run()
 
         return out
+
+class DsyncCommand(ExecutableCommand):
+    """Defines an object representing a dsync command."""
+
+    def __init__(self, namespace, command):
+        """Create a dsync Command object."""
+        super(DsyncCommand, self).__init__(namespace, command)
+
+        # dsync options
+
+        # show differences, but do not synchronize files
+        self.dryrun = FormattedParameter("--dryrun", False)
+        # batch files into groups of N during copy
+        self.batch_files = FormattedParameter("--batch-files {}")
+        # IO buffer size in bytes (default 64MB)
+        self.blocksize = FormattedParameter("--blocksize {}")
+        # work size per task in bytes (default 64MB)
+        self.chunksize = FormattedParameter("--chunksize {}")
+        # DAOS source pool
+        self.daos_src_pool = FormattedParameter("--daos-src-pool {}")
+        # DAOS destination pool
+        self.daos_dst_pool = FormattedParameter("--daos-dst-pool {}")
+        # DAOS source container
+        self.daos_src_cont = FormattedParameter("--daos-src-cont {}")
+        # DAOS destination container
+        self.daos_dst_cont = FormattedParameter("--daos-dst-cont {}")
+        # DAOS prefix for unified namespace path
+        self.daos_prefix = FormattedParameter("--daos-prefix {}")
+        # read and compare file contents rather than compare size and mtime
+        self.contents = FormattedParameter("--contents", False)
+        # delete extraneous files from target
+        self.delete = FormattedParameter("--delete", False)
+        # copy original files instead of links
+        self.dereference = FormattedParameter("--dereference", False)
+        # don't follow links in source
+        self.no_dereference = FormattedParameter("--no-dereference", False)
+        # open files with O_DIRECT
+        self.direct = FormattedParameter("--direct", False)
+        # hardlink to files in DIR when unchanged
+        self.link_dest = FormattedParameter("--link-dest {}")
+        # create sparse files when possible
+        self.sparse = FormattedParameter("--sparse", False)
+        # print progress every N seconds
+        self.progress = FormattedParameter("--progress {}")
+        # verbose output
+        self.verbose = FormattedParameter("--verbose", False)
+        # quiet output
+        self.quiet = FormattedParameter("--quiet", False)
+        # print help/usage
+        self.print_usage = FormattedParameter("--help", False)
+        # source path
+        self.src_path = BasicParameter(None)
+        # destination path
+        self.dst_path = BasicParameter(None)
+
+    def get_param_names(self):
+        """Overriding the original get_param_names."""
+
+        param_names = super(DsyncCommand, self).get_param_names()
+
+        # move key=dst_path to the end
+        param_names.sort(key='dst_path'.__eq__)
+
+        return param_names
+
+    def set_dsync_params(self,
+                         src_pool=None, src_cont=None, src_path=None,
+                         dst_pool=None, dst_cont=None, dst_path=None,
+                         prefix=None, display=True):
+        """Set all common dsync params.
+        Args:
+            src_pool (str, optional): source pool uuid
+            src_cont (str, optional): source container uuid
+            src_path (str, optional): source path
+            dst_pool (str, optional): destination pool uuid
+            dst_cont (str, optional): destination container uuid
+            dst_path (str, optional): destination path
+            prefix (str, optional): prefix for uns path
+            display (bool, optional): print updated params. Defaults to True.
+        """
+        if src_pool:
+            self.daos_src_pool.update(src_pool,
+                                      "daos_src_pool" if display else None)
+        if src_cont:
+            self.daos_src_cont.update(src_cont,
+                                      "daos_src_cont" if display else None)
+        if src_path:
+            self.src_path.update(src_path,
+                                 "src_path" if display else None)
+        if dst_pool:
+            self.daos_dst_pool.update(dst_pool,
+                                      "daos_dst_pool" if display else None)
+        if dst_cont:
+            self.daos_dst_cont.update(dst_cont,
+                                      "daos_dst_cont" if display else None)
+        if dst_path:
+            self.dst_path.update(dst_path,
+                                 "dst_path" if display else None)
+        if prefix:
+            self.daos_prefix.update(prefix,
+                                    "daos_prefix" if display else None) 
+
+class Dsync(DsyncCommand):
+    """Class defining an object of type DsyncCommand."""
+
+    def __init__(self, hosts, timeout=30):
+        """Create a dsync object."""
+        super(Dsync, self).__init__(
+            "/run/dsync/*", "dsync")
+
+        # set params
+        self.timeout = timeout
+        self.hosts = hosts
+
+    def run(self, tmp, processes):
+        # pylint: disable=arguments-differ
+        """Run the dsync command.
+        Args:
+            tmp (str): path for hostfiles
+            processes: Number of processes for dsync command
+        Returns:
+            CmdResult: Object that contains exit status, stdout, and other
+                information.
+        Raises:
+            CommandFailure: In case dsync run command fails
+        """
+        self.log.info('Starting dsync')
+
+        # Get job manager cmd
+        mpirun = Mpirun(self, mpitype="mpich")
+        mpirun.assign_hosts(self.hosts, tmp)
+        mpirun.assign_processes(processes)
+        mpirun.exit_status_exception = self.exit_status_exception
+
+        # run dsync
+        out = mpirun.run()
+
+        return out
