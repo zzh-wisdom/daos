@@ -1263,6 +1263,7 @@ do { \
 	"	  container (cont) container\n" \
 	"	  filesystem (fs)  copy to and from a POSIX filesystem\n" \
 	"	  object (obj)     object\n" \
+	"	  shell            Interactive obj ctl shell for DAOS\n" \
 	"	  version          print command version\n" \
 	"	  help             print this message and exit\n"); \
 	fprintf(stream, "\n"); \
@@ -1525,7 +1526,10 @@ main(int argc, char *argv[])
 		dargs.ostream = stdout;
 		help_hdlr(argc, argv, &dargs);
 		return 0;
-	} else if (argc <= 2) {
+	}  else if (strcmp(argv[1], "shell") == 0) {
+                rc = obj_ctl_shell(argc, argv);
+                return rc;
+        } else if (argc <= 2) {
 		dargs.ostream = stdout;
 		help_hdlr(argc, argv, &dargs);
 		return 2;
@@ -1538,8 +1542,9 @@ main(int argc, char *argv[])
 	} else if (strcmp(argv[1], "pool") == 0) {
 		hdlr = pool_op_hdlr;
 	} else if ((strcmp(argv[1], "object") == 0) ||
-		 (strcmp(argv[1], "obj") == 0))
+		 (strcmp(argv[1], "obj") == 0)) {
 		hdlr = obj_op_hdlr;
+	}
 
 	if (hdlr == NULL) {
 		dargs.ostream = stderr;
