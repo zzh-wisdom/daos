@@ -67,11 +67,17 @@ func (svc *ControlService) querySmdDevices(ctx context.Context, req *ctlpb.SmdQu
 		if err != nil {
 			return errors.Wrapf(err, "rank %d", srvRank)
 		}
+		if len(listDevsResp.Devices) > 0 {
+			svc.log.Debugf("XXX listSmdDevices smd dev #1 traddr: %q", listDevsResp.Devices[0].TrAddr)
+		}
 
 		if err := convert.Types(listDevsResp.Devices, &rResp.Devices); err != nil {
 			return errors.Wrap(err, "failed to convert device list")
 		}
 		resp.Ranks = append(resp.Ranks, rResp)
+		if len(rResp.Devices) > 0 {
+			svc.log.Debugf("XXX resp smd dev #1 traddr: %q", rResp.Devices[0].TrAddr)
+		}
 
 		if req.Uuid != "" {
 			found := false
