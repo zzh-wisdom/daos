@@ -197,10 +197,10 @@ typedef struct {
 	/**
 	 * Generate a fix-size hashed key from the real key.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in]  tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param key	[IN]	key buffer
-	 * \param hkey	[OUT]	hashed key
+	 * \param[in]  key	key buffer
+	 * \param[out] hkey	hashed key
 	 */
 	void		(*to_hkey_gen)(struct btr_instance *tins,
 				       d_iov_t *key, void *hkey);
@@ -209,7 +209,7 @@ typedef struct {
 
 	/** Static callback to metadata size of the record
 	 *
-	 * \param alloc_overhead[IN]	Expected per-allocation overhead
+	 * \param[in] alloc_overhead	Expected per-allocation overhead
 	 */
 	int		(*to_rec_msize)(int alloc_ovheread);
 	/**
@@ -219,10 +219,10 @@ typedef struct {
 	 * Absent:
 	 * Calls memcmp.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in] tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to be compared with \a key.
-	 * \param key	[IN]	Key to be compared with key of \a rec.
+	 * \param[in] rec	Record to be compared with \a key.
+	 * \param[in] key	Key to be compared with key of \a rec.
 	 *
 	 * \a return	BTR_CMP_LT	hkey of \a rec is smaller than \a hkey
 	 *		BTR_CMP_GT	hkey of \a rec is larger than \a hkey
@@ -241,10 +241,10 @@ typedef struct {
 	 * Absent:
 	 * Skip the function and only check rec::rec_hkey for the search.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in] tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to be compared with \a key.
-	 * \param key	[IN]	Key to be compared with key of \a rec.
+	 * \param[in] rec	Record to be compared with \a key.
+	 * \param[in] key	Key to be compared with key of \a rec.
 	 *
 	 * \a return	BTR_CMP_LT	key of \a rec is smaller than \a key
 	 *		BTR_CMP_GT	key of \a rec is larger than \a key
@@ -261,10 +261,10 @@ typedef struct {
 	 * The encoding/decoding of direct keys is required so that the key can
 	 * be serialized.
 	 *
-	 * @param tins		[IN]	Tree instance which contains the
-	 *				root umem offset and memory class etc.
-	 * @param key		[IN]	The current key of iteration.
-	 * @param anchor	[OUT]	Anchor for the iteration
+	 * @param[in]  tins	Tree instance which contains the
+	 *			root umem offset and memory class etc.
+	 * @param[in]  key	The current key of iteration.
+	 * @param[out] anchor	Anchor for the iteration
 	 */
 	void		(*to_key_encode)(struct btr_instance *tins,
 					 d_iov_t *key,
@@ -272,11 +272,11 @@ typedef struct {
 	/**
 	 * Required if using direct keys. (Should only be called for direct key)
 	 *
-	 * @param tins		[IN]	Tree instance which contains the root
-	 *				umem offset and memory class etc.
-	 * @param key		[OUT]	The key of iteration. Anchor will
-	 *				be decoded to key.
-	 * @param anchor	[IN]	Anchor of where iteration process is.
+	 * @param[in]  tins	Tree instance which contains the root
+	 *			umem offset and memory class etc.
+	 * @param[out] key	The key of iteration. Anchor will
+	 *			be decoded to key.
+	 * @param[in]  anchor	Anchor of where iteration process is.
 	 */
 	void		(*to_key_decode)(struct btr_instance *tins,
 					 d_iov_t *key,
@@ -285,13 +285,13 @@ typedef struct {
 	/**
 	 * Allocate record body for \a key and \a val.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in]  tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param key	[IN]	Key buffer
-	 * \param val	[IN]	Value buffer, it could be either data blob,
+	 * \param[in]  key	Key buffer
+	 * \param[in]  val	Value buffer, it could be either data blob,
 	 *			or complex data structure that can be parsed
 	 *			by the tree class.
-	 * \param rec	[OUT]	Returned record body pointer,
+	 * \param[out] rec	Returned record body pointer,
 	 *			See \a btr_record for the details.
 	 */
 	int		(*to_rec_alloc)(struct btr_instance *tins,
@@ -300,11 +300,10 @@ typedef struct {
 	/**
 	 * Free the record body stored in \a rec::rec_off
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in]  tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	The record to be destroyed.
-	 * \param args	[OUT]
-	 *			Optional: opaque buffer for providing arguments
+	 * \param[in]  rec	The record to be destroyed.
+	 * \param[out] args	Optional: opaque buffer for providing arguments
 	 *			to handle special cases for free. for example,
 	 *			allocator/GC address for externally allocated
 	 *			resources.
@@ -314,12 +313,12 @@ typedef struct {
 	/**
 	 * Fetch value or both key & value of a record.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in]  tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to be read from.
-	 * \param key	[OUT]	Optional, sink buffer for the returned key,
+	 * \param[in]  rec	Record to be read from.
+	 * \param[out] key	Optional, sink buffer for the returned key,
 	 *			or key address.
-	 * \param val	[OUT]	Sink buffer for the returned value or the
+	 * \param[out] val	Sink buffer for the returned value or the
 	 *			value address.
 	 */
 	int		(*to_rec_fetch)(struct btr_instance *tins,
@@ -329,16 +328,17 @@ typedef struct {
 	 * Update value of a record, the new value should be stored in the
 	 * current rec::rec_off.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in] tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to be updated.
-	 * \param val	[IN]	New value to be stored for the record.
-	 * \a return	0	success.
-	 *		-DER_NO_PERM
-	 *			cannot make inplace change, should call
-	 *			rec_free() to release the original record
-	 *			and rec_alloc() to create a new record.
-	 *		-ve	error code
+	 * \param[in] rec	Record to be updated.
+	 * \param[in] val	New value to be stored for the record.
+	 * \a return		0	success.
+	 *			-DER_NO_PERM
+	 *				cannot make inplace change, should call
+	 *				rec_free() to release the original
+	 *				record and rec_alloc() to create a new
+	 *				record.
+	 *			-ve	error code
 	 */
 	int		(*to_rec_update)(struct btr_instance *tins,
 					 struct btr_record *rec,
@@ -346,10 +346,10 @@ typedef struct {
 	/**
 	 * Optional:
 	 * Return key and value size of the record.
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in]  tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to get size from.
-	 * \param rstat	[OUT]	Returned key & value size.
+	 * \param[in]  rec	Record to get size from.
+	 * \param[out] rstat	Returned key & value size.
 	 */
 	int		(*to_rec_stat)(struct btr_instance *tins,
 				       struct btr_record *rec,
@@ -357,15 +357,15 @@ typedef struct {
 	/**
 	 * Convert record into readable string and store it in \a buf.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in]  tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to be converted.
-	 * \param leaf	[IN]	Both key and value should be converted to
+	 * \param[in]  rec	Record to be converted.
+	 * \param[in]  leaf	Both key and value should be converted to
 	 *			string if it is true, otherwise only the
 	 *			hashed key will be converted to string.
 	 *			(record of intermediate node),
-	 * \param buf	[OUT]	Buffer to store the returned string.
-	 * \param buf_len [IN]	Buffer length.
+	 * \param[out] buf	Buffer to store the returned string.
+	 * \param[in]  buf_len	Buffer length.
 	 */
 	char	       *(*to_rec_string)(struct btr_instance *tins,
 					 struct btr_record *rec, bool leaf,
@@ -374,10 +374,10 @@ typedef struct {
 	 * Optional:
 	 * Check whether the given record is available to outside or not.
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in] tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param rec	[IN]	Record to be checked.
-	 * \param intent [IN]	The intent for why check the record.
+	 * \param[in] rec	Record to be checked.
+	 * \param[in] intent	The intent for why check the record.
 	 *
 	 * \a return	ALB_AVAILABLE_DIRTY	The target is available but with
 	 *					some uncommitted modification
@@ -397,9 +397,9 @@ typedef struct {
 	/**
 	 * Allocate a tree node
 	 *
-	 * \param tins	[IN]	Tree instance which contains the root umem
+	 * \param[in] tins	Tree instance which contains the root umem
 	 *			offset and memory class etc.
-	 * \param size	[IN]	Node size
+	 * \param[in] size	Node size
 	 * \a return		Allocated node address (offset within the pool)
 	 */
 	umem_off_t	(*to_node_alloc)(struct btr_instance *tins, int size);
@@ -506,35 +506,308 @@ dbtree_is_empty_inplace(const struct btr_root *root)
 	return root->tr_depth == 0;
 }
 
+/** Register a tree class with associated callbacks
+ *
+ *  \param[in]	tree_class	Unique identifier for the class
+ *  \param[in]	tree_feats	Mask for all supported tree features
+ *  \param[in]	ops		Callbacks implementing tree class
+ *
+ *  return	0 on success, error otherwise
+ */
 int  dbtree_class_register(unsigned int tree_class, uint64_t tree_feats,
 			   btr_ops_t *ops);
+
+/** Allocate a handle that can be used open and create version 2 routines
+ *  to avoid excessive memory allocations
+ *
+ *  \param[out]	th	A usable tree handle
+ *
+ *  \return	0 on success, error otherwise
+ */
+int  dbtree_handle_create(daos_handle_t *th);
+
+/** Free a previously allocated handle
+ *
+ *  \param[in]	th	An allocated tree handle.  The handle must not be open.
+ *
+ *  \return	0 on success, error otherwise
+ */
+int  dbtree_handle_destroy(daos_handle_t th);
+
+/** Allocate, create, and open a new btree
+ *
+ *  \param[in]	tree_class	Already registered tree class
+ *  \param[in]	tree_feats	The set of features for this instance of the
+ *				tree.  Must be a subset of features supported
+ *				by the tree class.
+ * \param[in]	tree_order	The order (width) of tree nodes
+ * \param[in]	uma		umem attributes for allocations
+ * \param[out]	root_offp	Returned tree root umem offset
+ * \param[out]	toh		Returned open handle
+ *
+ *  \return	0 on success, error otherwise
+ */
 int  dbtree_create(unsigned int tree_class, uint64_t tree_feats,
 		   unsigned int tree_order, struct umem_attr *uma,
 		   umem_off_t *root_offp, daos_handle_t *toh);
+
+/** Create an open a new btree using specified root location
+ *
+ *  \param[in]	tree_class	Already registered tree class
+ *  \param[in]	tree_feats	The set of features for this instance of the
+ *				tree.  Must be a subset of features supported
+ *				by the tree class.
+ * \param[in]	tree_order	The order (width) of tree nodes
+ * \param[in]	uma		umem attributes for allocations
+ * \param[in]	root		Virtual memory address of tree root
+ * \param[out]	toh		Returned open handle
+ *
+ *  \return	0 on success, error otherwise
+ */
 int  dbtree_create_inplace(unsigned int tree_class, uint64_t tree_feats,
 			   unsigned int tree_order, struct umem_attr *uma,
 			   struct btr_root *root, daos_handle_t *toh);
+
+/** Create an open a new btree using specified root location
+ *
+ *  \param[in]	tree_class	Already registered tree class
+ *  \param[in]	tree_feats	The set of features for this instance of the
+ *				tree.  Must be a subset of features supported
+ *				by the tree class.
+ * \param[in]	tree_order	The order (width) of tree nodes
+ * \param[in]	uma		umem attributes for allocations
+ * \param[in]	root		Virtual memory address of tree root
+ * \param[in]	coh		Container open handle
+ * \param[in]	priv		Private data returned with callbacks
+ * \param[out]	toh		Returned open handle
+ *
+ *  \return	0 on success, error otherwise
+ */
 int  dbtree_create_inplace_ex(unsigned int tree_class, uint64_t tree_feats,
 			      unsigned int tree_order, struct umem_attr *uma,
 			      struct btr_root *root, daos_handle_t coh,
 			      void *priv, daos_handle_t *toh);
+
+/** Identical to dbtree_create except handle allocated with
+ *  dbtree_handle_create is passed in and used
+ *
+ *  \param[in]	tree_class	Already registered tree class
+ *  \param[in]	tree_feats	The set of features for this instance of the
+ *				tree.  Must be a subset of features supported
+ *				by the tree class.
+ * \param[in]	tree_order	The order (width) of tree nodes
+ * \param[in]	uma		umem attributes for allocations
+ * \param[out]	root_offp	Returned tree root umem offset
+ * \param[in]	th		Already created handle used for open
+ *
+ *  \return	0 on success, error otherwise
+ */
+int  dbtree_create2(unsigned int tree_class, uint64_t tree_feats,
+		    unsigned int tree_order, struct umem_attr *uma,
+		    umem_off_t *root_offp, daos_handle_t th);
+
+/** Identical to dbtree_create_inplace_ex except handle allocated with
+ *  dbtree_handle_create is passed in and used
+ *
+ *  \param[in]	tree_class	Already registered tree class
+ *  \param[in]	tree_feats	The set of features for this instance of the
+ *				tree.  Must be a subset of features supported
+ *				by the tree class.
+ * \param[in]	tree_order	The order (width) of tree nodes
+ * \param[in]	uma		umem attributes for allocations
+ * \param[in]	root		Virtual memory address of tree root
+ * \param[in]	coh		Container open handle
+ * \param[in]	priv		Private data returned with callbacks
+ * \param[in]	th		Already created handle used for open
+ *
+ *  \return	0 on success, error otherwise
+ */
+int  dbtree_create_inplace_ex2(unsigned int tree_class, uint64_t tree_feats,
+			       unsigned int tree_order, struct umem_attr *uma,
+			       struct btr_root *root, daos_handle_t coh,
+			       void *priv, daos_handle_t th);
+
+/** Open an existing btree
+ *
+ * \param[in]	root_off	Offset of root
+ * \param[in]	uma		umem attributes for allocations
+ * \param[out]	toh		Returns open handle
+ *
+ *  \return	0 on success, error otherwise
+ */
 int  dbtree_open(umem_off_t root_off, struct umem_attr *uma,
 		 daos_handle_t *toh);
+
+/** Open an existing btree using virtual memory address of root
+ *
+ * \param[in]	root		Virtual memory address of root
+ * \param[in]	uma		umem attributes for allocations
+ * \param[out]	toh		Returns open handle
+ *
+ *  \return	0 on success, error otherwise
+ */
 int  dbtree_open_inplace(struct btr_root *root, struct umem_attr *uma,
 			 daos_handle_t *toh);
+
+/** Open an existing btree using virtual memory address of root
+ *
+ * \param[in]	root		Virtual memory address of root
+ * \param[in]	uma		umem attributes for allocations
+ * \param[in]	coh		Container open handle
+ * \param[in]	priv		Optional argument passed to callbacks
+ * \param[out]	toh		Returns open handle
+ *
+ *  \return	0 on success, error otherwise
+ */
 int  dbtree_open_inplace_ex(struct btr_root *root, struct umem_attr *uma,
 			    daos_handle_t coh, void *priv, daos_handle_t *toh);
+
+/** Same as dbtree_open except handle allocated with dbtree_handle_create
+ *  is passed in and used.
+ *
+ * \param[in]	root_off	Offset of root
+ * \param[in]	uma		umem attributes for allocations
+ * \param[in]	th		Already created handle used for open
+ *
+ *  \return	0 on success, error otherwise
+ */
+int  dbtree_open2(umem_off_t root_off, struct umem_attr *uma,
+		  daos_handle_t th);
+
+/** Same as dbtree_open_inplace_ex except handle allocated with
+ *  dbtree_handle_create is passed in and used.
+ *
+ * \param[in]	root_off	Offset of root
+ * \param[in]	uma		umem attributes for allocations
+ * \param[in]	coh		Container open handle
+ * \param[in]	priv		Optional argument passed to callbacks
+ * \param[in]	th		Already created handle used for open
+ *
+ *  \return	0 on success, error otherwise
+ */
+int  dbtree_open_inplace_ex2(struct btr_root *root, struct umem_attr *uma,
+			     daos_handle_t coh, void *priv, daos_handle_t th);
+
+/* Closes an open tree handle
+ *
+ * \param toh	Open tree handle to close
+ *
+ * \return	0 on success, error otherwise
+ */
 int  dbtree_close(daos_handle_t toh);
+
+/* Destroys a tree referenced by the open tree handle
+ *
+ * \param toh	Open tree handle.  Handle is closed by routine
+ *
+ * \return	0 on success, error otherwise
+ */
 int  dbtree_destroy(daos_handle_t toh, void *args);
+
+/**
+ * This function drains key/values from the tree, each time it deletes a KV
+ * pair, it consumes a @credits, which is input parameter of this function.
+ * It returns if all input credits are consumed, or the tree is empty, in
+ * the later case, it also destroys the btree.
+ *
+ * \param[in]	  toh		Tree open handle.
+ * \param[in,out] credits	Input and returned drain credits
+ * \param[in]	  args		user parameter for btr_ops_t::to_rec_free
+ * \param[out]	  destroy	Tree is empty and destroyed
+ *
+ * \return	0 for success, error otherwise
+ */
 int  dbtree_drain(daos_handle_t toh, int *credits, void *args, bool *destroyed);
+
+/**
+ * Search the provided \a key and return its value to \a val_out.
+ * If \a val_out provides sink buffer, then this function will copy record
+ * value into the buffer, otherwise it only returns address of value of the
+ * current record.
+ *
+ * \param[in]  toh	Tree open handle.
+ * \param[in]  key	Key to search.
+ * \param[out] val	Returned value address, or sink buffer to
+ *			store returned value.
+ *
+ * \return		0	found
+ *			-ve	error code
+ */
 int  dbtree_lookup(daos_handle_t toh, d_iov_t *key, d_iov_t *val_out);
+
+/**
+ * Update value of the provided key.
+ *
+ * \param[in] toh	Tree open handle.
+ * \param[in] key	Key to search.
+ * \param[in] val	New value for the key, it will punch the
+ *			original value if \val is NULL.
+ *
+ * \return		0	success
+ *			-ve	error code
+ */
 int  dbtree_update(daos_handle_t toh, d_iov_t *key, d_iov_t *val);
+
+/**
+ * Search the provided \a key and fetch its value (and key if the matched key
+ * is different with the input key). This function can support advanced range
+ * search operation based on \a opc.
+ *
+ * If \a key_out and \a val_out provide sink buffers, then key and value will
+ * be copied into them. Otherwise if buffer address in \a key_out or/and
+ * \a val_out is/are NULL, then addresses of key or/and value of the current
+ * record will be returned.
+ *
+ * \param[in]  toh	Tree open handle.
+ * \param[in]  opc	Probe opcode, see dbtree_probe_opc_t for the details.
+ * \param[in]  intent	The operation intent.
+ * \param[in]  key	Key to search
+ * \param[out] key_out	Return the actual matched key if \a opc is not
+ *                      BTR_PROBE_EQ.
+ * \param[out] val_out	Returned value address, or sink buffer to store
+ *			returned value.
+ *
+ * \return		0	found
+ *			-ve	error code
+ */
 int  dbtree_fetch(daos_handle_t toh, dbtree_probe_opc_t opc, uint32_t intent,
 		  d_iov_t *key, d_iov_t *key_out, d_iov_t *val_out);
+
+/**
+ * Update the value of the provided key, or insert it as a new key if
+ * there is no match.
+ *
+ * \param[in] toh	Tree open handle.
+ * \param[in] opc	Probe opcode, see dbtree_probe_opc_t for the details.
+ * \param[in] intent	The operation intent
+ * \param[in] key	Key to search.
+ * \param[in] val	New value for the key, it will punch the original value
+ *			if \val is NULL.
+ *
+ * \return		0	success
+ *			-ve	error code
+ */
 int  dbtree_upsert(daos_handle_t toh, dbtree_probe_opc_t opc, uint32_t intent,
 		   d_iov_t *key, d_iov_t *val);
+
+/**
+ * Delete the @key and the corresponding value from the btree.
+ *
+ * \param[in]     toh	Tree open handle.
+ * \param[in]     key	The key to be deleted.
+ * \param[in,out] args	Optional: buffer to provide args to handle special
+ *			cases(if any)
+ */
 int  dbtree_delete(daos_handle_t toh, dbtree_probe_opc_t opc,
 		   d_iov_t *key, void *args);
+
+/**
+ * Query attributes and/or gather nodes and records statistics of btree.
+ *
+ * \param[in]  toh	The tree open handle.
+ * \param[out] attr	Optional, returned tree attributes.
+ * \param[out] stat	Optional, returned nodes and records statistics.
+ */
 int  dbtree_query(daos_handle_t toh, struct btr_attr *attr,
 		  struct btr_stat *stat);
 int  dbtree_is_empty(daos_handle_t toh);
@@ -551,15 +824,80 @@ enum {
 	BTR_ITER_EMBEDDED	= (1 << 0),
 };
 
+/**
+ * Initialize iterator.
+ *
+ * \param[in] toh		[IN]	Tree open handle
+ * \param[in] options	Options for the iterator.
+ *			BTR_ITER_EMBEDDED:
+ *				if this bit is set, then this function will
+ *				return the iterator embedded in the tree open
+ *				handle. It will reduce memory consumption,
+ *				but state of iterator could be overwritten
+ *				by any other tree operation.
+ *
+ * \param[out] ih	Returned iterator handle.
+ *
+ * \return	0 for success, error otherwise
+ */
 int dbtree_iter_prepare(daos_handle_t toh, unsigned int options,
 			daos_handle_t *ih);
 int dbtree_iter_finish(daos_handle_t ih);
+
+/**
+ * Based on the \a opc, this function can do various things:
+ * - set the cursor of the iterator to the first or the last record.
+ * - find the record for the provided key.
+ * - find the first record whose key is greater than or equal to the key.
+ * - find the first record whose key is less than or equal to the key.
+ *
+ * This function must be called after dbtree_iter_prepare, it can be called
+ * for arbitrary times for the same iterator.
+ *
+ * \param[in] ih	The iterator handle.
+ * \param[in] opc	Probe opcode, see dbtree_probe_opc_t for the details.
+ * \param[in] intent	The operation intent.
+ * \param[in] key	The key to probe, it will be ignored if opc is
+ *			BTR_PROBE_FIRST or BTR_PROBE_LAST.
+ * \param[in] anchor	the anchor point to probe, it will be ignored if
+ *			\a key is provided.
+ * \note		If opc is not BTR_PROBE_FIRST or BTR_PROBE_LAST,
+ *			key or anchor is required.
+ *
+ * return	0 for success, error otherwise
+ */
 int dbtree_iter_probe(daos_handle_t ih, dbtree_probe_opc_t opc,
 		      uint32_t intent, d_iov_t *key, daos_anchor_t *anchor);
 int dbtree_iter_next(daos_handle_t ih);
 int dbtree_iter_prev(daos_handle_t ih);
+
+/**
+ * Fetch the key and value of current record, if \a key and \a val provide
+ * sink buffers, then key and value will be copied into them. If buffer
+ * address in \a key or/and \a val is/are NULL, then this function only
+ * returns addresses of key or/and value of the current record.
+ *
+ * \param[in]  ih	Iterator open handle.
+ * \param[out] key	Sink buffer for the returned key, the key address is
+ *			returned if buffer address is NULL.
+ * \param[out] val	Sink buffer for the returned value, the value address
+ *			is returned if buffer address is NULL.
+ * \param[out] anchor	Returned iteration anchor.
+ */
 int dbtree_iter_fetch(daos_handle_t ih, d_iov_t *key,
 		      d_iov_t *val, daos_anchor_t *anchor);
+
+/**
+ * Delete the record pointed by the current iterating cursor. This function
+ * will reset iterator before return, it means that caller should call
+ * dbtree_iter_probe() again to reinitialize the iterator.
+ *
+ * \param[in]  ih		Iterator open handle.
+ * \param[out] value_out	Optional, buffer to preserve value while
+ *				deleting btree node.
+ *
+ * \return	0 on success, error otherwise
+ */
 int dbtree_iter_delete(daos_handle_t ih, void *args);
 int dbtree_iter_empty(daos_handle_t ih);
 
@@ -572,6 +910,19 @@ int dbtree_iter_empty(daos_handle_t ih);
  */
 typedef int (*dbtree_iterate_cb_t)(daos_handle_t ih, d_iov_t *key,
 				   d_iov_t *val, void *arg);
+
+/**
+ * Helper function to iterate a dbtree, either from the first record forward
+ * (\a backward == false) or from the last record backward (\a backward ==
+ * true). \a cb will be called with \a arg for each record. See also
+ * dbtree_iterate_cb_t.
+ *
+ * \param[in] toh	Tree open handle
+ * \param[in] intent	The operation intent
+ * \param[in] backward	If true, iterate from last to first
+ * \param[in] cb	Callback function (see dbtree_iterate_cb_t)
+ * \param[in] arg	Callback argument
+ */
 int dbtree_iterate(daos_handle_t toh, uint32_t intent, bool backward,
 		   dbtree_iterate_cb_t cb, void *arg);
 

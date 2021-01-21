@@ -871,7 +871,8 @@ vos_evt_desc_cbs_init(struct evt_desc_cbs *cbs, struct vos_pool *pool,
 
 static int
 tree_open_create(struct vos_object *obj, enum vos_tree_class tclass, int flags,
-		 struct vos_krec_df *krec, bool created, daos_handle_t *sub_toh)
+		 struct vos_krec_df *krec, bool created,
+		 struct vos_handle *sub_toh)
 {
 	struct umem_attr        *uma = vos_obj2uma(obj);
 	struct vos_pool		*pool = vos_obj2pool(obj);
@@ -903,13 +904,19 @@ tree_open_create(struct vos_object *obj, enum vos_tree_class tclass, int flags,
 	vos_evt_desc_cbs_init(&cbs, pool, coh);
 	if (krec->kr_bmap & expected_flag) {
 		if (flags & SUBTR_EVT) {
-			rc = evt_open(&krec->kr_evt, uma, &cbs, sub_toh);
+			rc = evt_open(&krec->kr_evt, uma, &cbs,
+				      &sub_toh->vh_ent);
+		} else if (sub_toh->vh_pre_alloc) {
+			rc = dbtree_open_inplace_ex2(&krec->kr_btr, uma, coh,
+						     pool, sub_toh->vh_ent);
 		} else {
 			rc = dbtree_open_inplace_ex(&krec->kr_btr, uma, coh,
-						    pool, sub_toh);
+						    pool, &sub_toh->vh_ent);
 		}
 		if (rc != 0)
 			D_ERROR("Failed to open tree: "DF_RC"\n", DP_RC(rc));
+		else
+			sub_toh->vh_in_use = true;
 
 		goto out;
 	}
@@ -934,7 +941,7 @@ tree_open_create(struct vos_object *obj, enum vos_tree_class tclass, int flags,
 
 	if (flags & SUBTR_EVT) {
 		rc = evt_create(&krec->kr_evt, vos_evt_feats, VOS_EVT_ORDER,
-				uma, &cbs, sub_toh);
+				uma, &cbs, &sub_toh->vh_ent);
 		if (rc != 0) {
 			D_ERROR("Failed to create evtree: "DF_RC"\n",
 				DP_RC(rc));
@@ -963,9 +970,17 @@ tree_open_create(struct vos_object *obj, enum vos_tree_class tclass, int flags,
 		D_DEBUG(DB_TRACE, "Create dbtree %s feats 0x"DF_X64"\n",
 			ta->ta_name, tree_feats);
 
-		rc = dbtree_create_inplace_ex(ta->ta_class, tree_feats,
-					      ta->ta_order, uma, &krec->kr_btr,
-					      coh, pool, sub_toh);
+		if (sub_toh->vh_pre_alloc) {
+			rc = dbtree_create_inplace_ex2(ta->ta_class, tree_feats,
+						       ta->ta_order, uma,
+						       &krec->kr_btr, coh, pool,
+						       sub_toh->vh_ent);
+		} else {
+			rc = dbtree_create_inplace_ex(ta->ta_class, tree_feats,
+						      ta->ta_order, uma,
+						      &krec->kr_btr, coh, pool,
+						      &sub_toh->vh_ent);
+		}
 		if (rc != 0) {
 			D_ERROR("Failed to create btree: "DF_RC"\n", DP_RC(rc));
 			goto out;
@@ -974,6 +989,7 @@ tree_open_create(struct vos_object *obj, enum vos_tree_class tclass, int flags,
 	/* NB: Only happens on create so krec will be in the transaction log
 	 * already.
 	 */
+	sub_toh->vh_in_use = true;
 	krec->kr_bmap |= expected_flag;
 out:
 	return rc;
@@ -987,10 +1003,10 @@ out:
  *		  load both btree and evtree root.
  */
 int
-key_tree_prepare(struct vos_object *obj, daos_handle_t toh,
-		 enum vos_tree_class tclass, daos_key_t *key, int flags,
-		 uint32_t intent, struct vos_krec_df **krecp,
-		 daos_handle_t *sub_toh, struct vos_ts_set *ts_set)
+key_tree_prepare2(struct vos_object *obj, daos_handle_t toh,
+		  enum vos_tree_class tclass, daos_key_t *key, int flags,
+		  uint32_t intent, struct vos_krec_df **krecp,
+		  struct vos_handle *sub_toh, struct vos_ts_set *ts_set)
 {
 	struct ilog_df		*ilog = NULL;
 	struct vos_krec_df	*krec = NULL;
@@ -1084,6 +1100,29 @@ key_tree_prepare(struct vos_object *obj, daos_handle_t toh,
 	return rc;
 }
 
+/** for temporary backward compatibility */
+int
+key_tree_prepare(struct vos_object *obj, daos_handle_t toh,
+		 enum vos_tree_class tclass, daos_key_t *key, int flags,
+		 uint32_t intent, struct vos_krec_df **krecp,
+		 daos_handle_t *sub_toh, struct vos_ts_set *ts_set)
+{
+	struct vos_handle	*tohp = NULL;
+	struct vos_handle	 stoh = {0};
+	int			 rc;
+
+	if (sub_toh)
+		tohp = &stoh;
+
+	rc = key_tree_prepare2(obj, toh, tclass, key, flags, intent, krecp,
+			       tohp, ts_set);
+
+	if (rc == 0 && sub_toh)
+		*sub_toh = stoh.vh_ent;
+
+	return rc;
+}
+
 /** Close the opened trees */
 void
 key_tree_release(daos_handle_t toh, bool is_array)
@@ -1096,6 +1135,14 @@ key_tree_release(daos_handle_t toh, bool is_array)
 		rc = dbtree_close(toh);
 
 	D_ASSERT(rc == 0 || rc == -DER_NO_HDL);
+}
+
+void
+key_tree_release2(struct vos_handle *toh, bool is_array)
+{
+	toh->vh_in_use = false;
+
+	return key_tree_release(toh->vh_ent, is_array);
 }
 
 /**

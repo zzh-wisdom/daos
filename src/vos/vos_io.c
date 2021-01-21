@@ -19,8 +19,16 @@
 #include "vos_internal.h"
 #include "evt_priv.h"
 
+enum {
+	IOC_BTR_AKEY,
+	IOC_BTR_SINGV,
+	IOC_BTR_ILOG,
+	IOC_BTR_NR_TYPES,
+};
+
 /** I/O context */
 struct vos_io_context {
+	d_list_t		 ic_link;
 	/** The epoch bound including uncertainty */
 	daos_epoch_t		 ic_bound;
 	daos_epoch_range_t	 ic_epr;
@@ -78,6 +86,9 @@ struct vos_io_context {
 	 * by vos_ioh2recx_list() and shall free it by daos_recx_ep_list_free().
 	 */
 	struct daos_recx_ep_list *ic_recx_lists;
+	/** Preallocated handles for btrees accessed by I/O */
+	struct vos_handle	 ic_btr[IOC_BTR_NR_TYPES];
+	struct vos_handle	 ic_evt;
 };
 
 static inline daos_size_t
@@ -419,6 +430,79 @@ vos_ioc_reserve_init(struct vos_io_context *ioc, struct dtx_handle *dth)
 	return 0;
 }
 
+static struct vos_io_context *
+vos_ioc_acquire(void)
+{
+	struct vos_tls	*tls = vos_tls_get();
+
+	return d_dtm_acquire(tls->vtl_ioc_type);
+}
+
+static void
+vos_ioc_release(struct vos_io_context *ioc)
+{
+	struct vos_tls	*tls = vos_tls_get();
+
+	d_dtm_release(tls->vtl_ioc_type, ioc);
+	/** Ideally, this would be called off critical path */
+	d_dtm_restock(tls->vtl_ioc_type);
+}
+
+static int
+ioc_init(void *arg, void *dtm_arg)
+{
+	struct vos_io_context	*ioc = arg;
+	int			 rc = 0;
+	int			 i;
+
+	for (i = 0; i < IOC_BTR_NR_TYPES; i++) {
+		rc = dbtree_handle_create(&ioc->ic_btr[i].vh_ent);
+		if (rc != 0) {
+			/* Rather than fail, just initialize this entry
+			 * differently
+			 */
+			ioc->ic_btr[i].vh_ent = DAOS_HDL_INVAL;
+			continue;
+		}
+		ioc->ic_btr[i].vh_pre_alloc = true;
+	}
+
+	return 0;
+}
+
+static void
+ioc_fini(void *arg, void *dtm_arg)
+{
+	struct vos_io_context	*ioc = arg;
+	int			 i;
+
+	for (i = 0; i < IOC_BTR_NR_TYPES; i++) {
+		if (ioc->ic_btr[i].vh_pre_alloc)
+			dbtree_handle_destroy(ioc->ic_btr[i].vh_ent);
+	}
+}
+
+static bool
+ioc_reset(void *arg)
+{
+	struct vos_io_context	*ioc = arg;
+
+	memset(ioc, 0, offsetof(struct vos_io_context, ic_btr));
+
+	return true;
+}
+
+struct d_dtm_type *
+vos_ioc_register(struct d_dtm *dtm)
+{
+	struct d_dtm_reg ioc_reg = {.dr_init = ioc_init,
+				    .dr_fini = ioc_fini,
+				    .dr_reset = ioc_reset,
+				    POOL_TYPE_INIT(vos_io_context, ic_link)};
+
+	return d_dtm_register(dtm, &ioc_reg);
+}
+
 static void
 vos_ioc_destroy(struct vos_io_context *ioc, bool evict)
 {
@@ -436,7 +520,7 @@ vos_ioc_destroy(struct vos_io_context *ioc, bool evict)
 	vos_ilog_fetch_finish(&ioc->ic_akey_info);
 	vos_cont_decref(ioc->ic_cont);
 	vos_ts_set_free(ioc->ic_ts_set);
-	D_FREE(ioc);
+	vos_ioc_release(ioc);
 }
 
 static int
@@ -462,7 +546,7 @@ vos_ioc_create(daos_handle_t coh, daos_unit_oid_t oid, bool read_only,
 		goto error;
 	}
 
-	D_ALLOC_PTR(ioc);
+	ioc = vos_ioc_acquire();
 	if (ioc == NULL)
 		return -DER_NOMEM;
 
@@ -1056,7 +1140,7 @@ akey_fetch(struct vos_io_context *ioc, daos_handle_t ak_toh)
 	daos_iod_t		*iod = &ioc->ic_iods[ioc->ic_sgl_at];
 	struct vos_krec_df	*krec = NULL;
 	daos_epoch_range_t	 val_epr = {0};
-	daos_handle_t		 toh = DAOS_HDL_INVAL;
+	struct vos_handle	*toh;
 	int			 i, rc;
 	int			 flags = 0;
 	bool			 is_array = (iod->iod_type == DAOS_IOD_ARRAY);
@@ -1067,12 +1151,16 @@ akey_fetch(struct vos_io_context *ioc, daos_handle_t ak_toh)
 		iod->iod_type == DAOS_IOD_ARRAY ? "array" : "single",
 		ioc->ic_epr.epr_lo, ioc->ic_epr.epr_hi);
 
-	if (is_array)
+	if (is_array) {
 		flags |= SUBTR_EVT;
+		toh = &ioc->ic_evt;
+	} else {
+		toh = &ioc->ic_btr[IOC_BTR_SINGV];
+	}
 
-	rc = key_tree_prepare(ioc->ic_obj, ak_toh,
-			      VOS_BTR_AKEY, &iod->iod_name, flags,
-			      DAOS_INTENT_DEFAULT, &krec, &toh, ioc->ic_ts_set);
+	rc = key_tree_prepare2(ioc->ic_obj, ak_toh, VOS_BTR_AKEY,
+			       &iod->iod_name, flags, DAOS_INTENT_DEFAULT,
+			       &krec, toh, ioc->ic_ts_set);
 
 	if (stop_check(ioc, VOS_OF_COND_AKEY_FETCH, iod, &rc, true)) {
 		if (rc == 0 && !ioc->ic_read_ts_only)
@@ -1101,7 +1189,8 @@ fetch_value:
 		goto out; /* skip value fetch */
 
 	if (iod->iod_type == DAOS_IOD_SINGLE) {
-		rc = akey_fetch_single(toh, &val_epr, &iod->iod_size, ioc);
+		rc = akey_fetch_single(toh->vh_ent, &val_epr, &iod->iod_size,
+				       ioc);
 		goto out;
 	}
 
@@ -1126,7 +1215,7 @@ fetch_value:
 		while (iod_recx.rx_nr > 0) {
 			akey_fetch_recx_get(&iod_recx, shadow, &fetch_recx,
 					    &shadow_ep);
-			rc = akey_fetch_recx(toh, &val_epr, &fetch_recx,
+			rc = akey_fetch_recx(toh->vh_ent, &val_epr, &fetch_recx,
 					     shadow_ep, &rsize, ioc);
 
 			if (vos_dtx_continue_detect(rc))
@@ -1165,8 +1254,8 @@ fetch_value:
 
 	ioc_trim_tail_holes(ioc);
 out:
-	if (daos_handle_is_valid(toh))
-		key_tree_release(toh, is_array);
+	if (vos_handle_is_valid(toh))
+		key_tree_release2(toh, is_array);
 
 	return vos_dtx_hit_inprogress() ? -DER_INPROGRESS : rc;
 }
@@ -1186,16 +1275,15 @@ dkey_fetch(struct vos_io_context *ioc, daos_key_t *dkey)
 {
 	struct vos_object	*obj = ioc->ic_obj;
 	struct vos_krec_df	*krec;
-	daos_handle_t		 toh = DAOS_HDL_INVAL;
+	struct vos_handle	*toh = &ioc->ic_btr[IOC_BTR_AKEY];
 	int			 i, rc;
 
 	rc = obj_tree_init(obj);
 	if (rc != 0)
 		return rc;
 
-	rc = key_tree_prepare(obj, obj->obj_toh, VOS_BTR_DKEY,
-			      dkey, 0, DAOS_INTENT_DEFAULT, &krec,
-			      &toh, ioc->ic_ts_set);
+	rc = key_tree_prepare2(obj, obj->obj_toh, VOS_BTR_DKEY, dkey, 0,
+			       DAOS_INTENT_DEFAULT, &krec, toh, ioc->ic_ts_set);
 
 	if (stop_check(ioc, VOS_COND_FETCH_MASK | VOS_OF_COND_PER_AKEY, NULL,
 		       &rc, true)) {
@@ -1233,7 +1321,7 @@ dkey_fetch(struct vos_io_context *ioc, daos_key_t *dkey)
 fetch_akey:
 	for (i = 0; i < ioc->ic_iod_nr; i++) {
 		iod_set_cursor(ioc, i);
-		rc = akey_fetch(ioc, toh);
+		rc = akey_fetch(ioc, toh->vh_ent);
 		if (vos_dtx_continue_detect(rc))
 			continue;
 
@@ -1246,8 +1334,8 @@ fetch_akey:
 		goto out;
 
 out:
-	if (daos_handle_is_valid(toh))
-		key_tree_release(toh, false);
+	if (vos_handle_is_valid(toh))
+		key_tree_release2(toh, false);
 
 	return vos_dtx_hit_inprogress() ? -DER_INPROGRESS : rc;
 }
@@ -1489,7 +1577,7 @@ akey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_handle_t ak_toh,
 	uint32_t		 update_cond = 0;
 	bool			 is_array = (iod->iod_type == DAOS_IOD_ARRAY);
 	int			 flags = SUBTR_CREATE;
-	daos_handle_t		 toh = DAOS_HDL_INVAL;
+	struct vos_handle	*toh;
 	int			 i;
 	int			 rc = 0;
 
@@ -1497,12 +1585,15 @@ akey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_handle_t ak_toh,
 		DP_KEY(&iod->iod_name), is_array ? "array" : "single",
 		ioc->ic_epr.epr_hi);
 
-	if (is_array)
+	if (is_array) {
 		flags |= SUBTR_EVT;
+		toh = &ioc->ic_evt;
+	} else {
+		toh = &ioc->ic_btr[IOC_BTR_SINGV];
+	}
 
-	rc = key_tree_prepare(obj, ak_toh, VOS_BTR_AKEY,
-			      &iod->iod_name, flags, DAOS_INTENT_UPDATE,
-			      &krec, &toh, ioc->ic_ts_set);
+	rc = key_tree_prepare2(obj, ak_toh, VOS_BTR_AKEY, &iod->iod_name, flags,
+			       DAOS_INTENT_UPDATE, &krec, toh, ioc->ic_ts_set);
 	if (rc != 0)
 		return rc;
 
@@ -1549,8 +1640,8 @@ akey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_handle_t ak_toh,
 
 		gsize = (iod->iod_recxs == NULL) ? iod->iod_size :
 						   (uintptr_t)iod->iod_recxs;
-		rc = akey_update_single(toh, pm_ver, iod->iod_size, gsize, ioc,
-					minor_epc);
+		rc = akey_update_single(toh->vh_ent, pm_ver, iod->iod_size,
+					gsize, ioc, minor_epc);
 		goto out;
 	} /* else: array */
 
@@ -1568,7 +1659,7 @@ akey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_handle_t ak_toh,
 
 		if (iod_csums != NULL)
 			recx_csum = &iod_csums[i];
-		rc = akey_update_recx(toh, pm_ver, &iod->iod_recxs[i],
+		rc = akey_update_recx(toh->vh_ent, pm_ver, &iod->iod_recxs[i],
 				      recx_csum, iod->iod_size, ioc,
 				      minor_epc);
 		if (rc != 0)
@@ -1576,8 +1667,8 @@ akey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_handle_t ak_toh,
 	}
 
 out:
-	if (daos_handle_is_valid(toh))
-		key_tree_release(toh, is_array);
+	if (vos_handle_is_valid(toh))
+		key_tree_release2(toh, is_array);
 
 	return rc;
 }
@@ -1587,7 +1678,7 @@ dkey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_key_t *dkey,
 	    uint16_t minor_epc)
 {
 	struct vos_object	*obj = ioc->ic_obj;
-	daos_handle_t		 ak_toh;
+	struct vos_handle	*ak_toh = &ioc->ic_btr[IOC_BTR_AKEY];
 	struct vos_krec_df	*krec;
 	uint32_t		 update_cond = 0;
 	bool			 subtr_created = false;
@@ -1597,9 +1688,9 @@ dkey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_key_t *dkey,
 	if (rc != 0)
 		return rc;
 
-	rc = key_tree_prepare(obj, obj->obj_toh, VOS_BTR_DKEY, dkey,
-			      SUBTR_CREATE, DAOS_INTENT_UPDATE, &krec, &ak_toh,
-			      ioc->ic_ts_set);
+	rc = key_tree_prepare2(obj, obj->obj_toh, VOS_BTR_DKEY, dkey,
+			       SUBTR_CREATE, DAOS_INTENT_UPDATE, &krec, ak_toh,
+			       ioc->ic_ts_set);
 	if (rc != 0) {
 		D_ERROR("Error preparing dkey tree: rc="DF_RC"\n", DP_RC(rc));
 		goto out;
@@ -1633,7 +1724,7 @@ dkey_update(struct vos_io_context *ioc, uint32_t pm_ver, daos_key_t *dkey,
 	for (i = 0; i < ioc->ic_iod_nr; i++) {
 		iod_set_cursor(ioc, i);
 
-		rc = akey_update(ioc, pm_ver, ak_toh, minor_epc);
+		rc = akey_update(ioc, pm_ver, ak_toh->vh_ent, minor_epc);
 		if (rc != 0)
 			goto out;
 	}
@@ -1646,7 +1737,7 @@ out:
 		goto release;
 
 release:
-	key_tree_release(ak_toh, false);
+	key_tree_release2(ak_toh, false);
 
 	return rc;
 }

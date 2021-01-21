@@ -15,7 +15,10 @@
 struct d_dtm_reg {
 	/* Perform any one-time setup or assigning constants.
 	 */
-	void	(*dr_init)(void *, void *);
+	int	(*dr_init)(void *, void *);
+	/* Perform any one-time teardown, particularly any deallocations
+	 */
+	void	(*dr_fini)(void *, void *);
 
 	/* Prepare an object for use by freeing any old data
 	 * and allocating new data.
@@ -33,6 +36,8 @@ struct d_dtm_reg {
 	int	dr_max_desc;
 	/* Maximum number of descriptors to exist on the free_list */
 	int	dr_max_free_desc;
+	/** Type is shared amongst multiple threads and needs locking */
+	bool	dr_use_lock;
 };
 
 /* If max_desc is non-zero then at most max_desc descriptors can exist

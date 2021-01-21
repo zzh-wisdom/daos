@@ -16,6 +16,7 @@
 #include <gurt/list.h>
 #include <gurt/hash.h>
 #include <daos/btree.h>
+#include <gurt/dtm.h>
 #include <daos/common.h>
 #include <daos/lru.h>
 #include <daos_srv/daos_engine.h>
@@ -125,6 +126,22 @@ agg_reserve_space(daos_size_t *rsrvd)
 
 	rsrvd[DAOS_MEDIA_SCM]	+= size;
 	rsrvd[DAOS_MEDIA_NVME]	+= size;
+}
+
+/** Struct for managing both preallocated and on-demand tree handles */
+struct vos_handle {
+	daos_handle_t	vh_ent;
+	bool		vh_pre_alloc;
+	bool		vh_in_use;
+};
+
+static inline bool
+vos_handle_is_valid(const struct vos_handle *vh)
+{
+	if (vh->vh_pre_alloc)
+		return vh->vh_in_use;
+
+	return daos_handle_is_valid(vh->vh_ent);
 }
 
 /**
@@ -998,6 +1015,13 @@ key_tree_prepare(struct vos_object *obj, daos_handle_t toh,
 void
 key_tree_release(daos_handle_t toh, bool is_array);
 int
+key_tree_prepare2(struct vos_object *obj, daos_handle_t toh,
+		 enum vos_tree_class tclass, daos_key_t *key, int flags,
+		 uint32_t intent, struct vos_krec_df **krecp,
+		 struct vos_handle *sub_toh, struct vos_ts_set *ts_set);
+void
+key_tree_release2(struct vos_handle *toh, bool is_array);
+int
 key_tree_punch(struct vos_object *obj, daos_handle_t toh, daos_epoch_t epoch,
 	       daos_epoch_t bound, d_iov_t *key_iov, d_iov_t *val_iov,
 	       uint64_t flags, struct vos_ts_set *ts_set,
@@ -1257,5 +1281,8 @@ void
 vos_ts_add_missing(struct vos_ts_set *ts_set, daos_key_t *dkey, int akey_nr,
 		   struct vos_akey_data *ad);
 
+/** Registration for ioc */
+struct d_dtm_type *
+vos_ioc_register(struct d_dtm *dtm);
 
 #endif /* __VOS_INTERNAL_H__ */

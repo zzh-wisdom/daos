@@ -195,8 +195,7 @@ key_punch(struct vos_object *obj, daos_epoch_t epoch, daos_epoch_t bound,
 	for (i = 0; i < akey_nr; i++) {
 		rbund.rb_iov = &akeys[i];
 		rc = key_tree_punch(obj, toh, epoch, bound, &akeys[i], &riov,
-				    flags, ts_set, &dkey_info,
-				    &akey_info);
+				    flags, ts_set, &dkey_info, &akey_info);
 		if (rc != 0) {
 			VOS_TX_LOG_FAIL(rc, "Failed to punch akey: rc="
 					DF_RC"\n", DP_RC(rc));
@@ -206,8 +205,7 @@ key_punch(struct vos_object *obj, daos_epoch_t epoch, daos_epoch_t bound,
 
 	if (rc == 0 && (flags & VOS_OF_REPLAY_PC) == 0) {
 		/** Check if we need to propagate the punch */
-		rc = vos_propagate_check(obj, toh, ts_set, &epr,
-					 VOS_ITER_AKEY);
+		rc = vos_propagate_check(obj, toh, ts_set, &epr, VOS_ITER_AKEY);
 	}
 
 	if (rc != 1)
@@ -515,7 +513,7 @@ out_tx:
 	rc = umem_tx_end(umm, rc);
 	gc_wait(); /* NB: noop for full-stack mode */
 out:
-	if (akey)
+	if (akey && daos_handle_is_valid(toh))
 		key_tree_release(toh, false);
 
 	vos_obj_release(occ, obj, true);
@@ -770,8 +768,8 @@ key_iter_match(struct vos_obj_iter *oiter, vos_iter_entry_t *ent)
 	}
 
 	vos_ilog_fetch_init(&info);
-	rc = key_ilog_prepare(oiter, toh, VOS_BTR_AKEY, &oiter->it_akey, 0,
-			      NULL, NULL, NULL, &info, NULL);
+	rc = key_ilog_prepare(oiter, toh, VOS_BTR_AKEY, &oiter->it_akey,
+			      0, NULL, NULL, NULL, &info, NULL);
 	if (rc == 0)
 		rc = IT_OPC_NOOP;
 

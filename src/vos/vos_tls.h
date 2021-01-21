@@ -15,6 +15,7 @@
 
 #include <gurt/list.h>
 #include <gurt/hash.h>
+#include <gurt/dtm.h>
 #include <daos/btree.h>
 #include <daos/common.h>
 #include <daos/lru.h>
@@ -60,6 +61,8 @@ struct vos_tls {
 		uint64_t		 vtl_hash;
 		bool			 vtl_hash_set;
 	};
+	struct d_dtm_type		*vtl_ioc_type;
+	struct d_dtm			 vtl_dtm;
 };
 
 struct bio_xs_context *vos_xsctxt_get(void);

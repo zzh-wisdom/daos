@@ -74,10 +74,13 @@ d_dtm_destroy(struct d_dtm *dtm)
 					dt_type_list))) {
 		if (type->dt_count != 0)
 			D_TRACE_WARN(type, "Freeing type with active objects");
-		rc = pthread_mutex_destroy(&type->dt_lock);
-		if (rc != 0)
-			D_TRACE_ERROR(type, "Failed to destroy lock %d %s",
-				      rc, strerror(rc));
+		if (type->dt_reg.dr_use_lock) {
+			rc = pthread_mutex_destroy(&type->dt_lock);
+			if (rc != 0)
+				D_TRACE_ERROR(type,
+					      "Failed to destroy lock %d %s",
+					      rc, strerror(rc));
+		}
 		D_FREE(type);
 	}
 	rc = pthread_mutex_destroy(&dtm->dtm_lock);
@@ -161,7 +164,8 @@ d_dtm_reclaim(struct d_dtm *dtm)
 
 		D_TRACE_DEBUG(DB_ANY, type, "Resetting type");
 
-		D_MUTEX_LOCK(&type->dt_lock);
+		if (type->dt_reg.dr_use_lock)
+			D_MUTEX_LOCK(&type->dt_lock);
 
 		/* Reclaim any pending objects.  Count here just needs to be
 		 * larger than pending_count + free_count however simply
@@ -178,6 +182,10 @@ d_dtm_reclaim(struct d_dtm *dtm)
 			}
 
 			d_list_del(entry);
+			if (type->dt_reg.dr_fini) {
+				type->dt_reg.dr_fini(ptr,
+						     type->dt_dtm->dtm_arg);
+			}
 			D_FREE(ptr);
 			type->dt_free_count--;
 			type->dt_count--;
@@ -189,7 +197,8 @@ d_dtm_reclaim(struct d_dtm *dtm)
 				     type->dt_count, type->dt_reg.dr_name);
 			active_descriptors = true;
 		}
-		D_MUTEX_UNLOCK(&type->dt_lock);
+		if (type->dt_reg.dr_use_lock)
+			D_MUTEX_UNLOCK(&type->dt_lock);
 	}
 	D_MUTEX_UNLOCK(&dtm->dtm_lock);
 	return active_descriptors;
@@ -203,14 +212,21 @@ static void *
 create(struct d_dtm_type *type)
 {
 	void *ptr;
+	int rc;
 
 	D_ALLOC(ptr, type->dt_reg.dr_size);
 	if (!ptr)
 		return NULL;
 
 	type->dt_init_count++;
-	if (type->dt_reg.dr_init)
+	if (type->dt_reg.dr_init) {
 		type->dt_reg.dr_init(ptr, type->dt_dtm->dtm_arg);
+		if (rc != 0) {
+			D_TRACE_INFO(type, "entry %p failed init", ptr);
+			D_FREE(ptr);
+			return NULL;
+		}
+	}
 
 	if (type->dt_reg.dr_reset) {
 		if (!type->dt_reg.dr_reset(ptr)) {
@@ -266,10 +282,12 @@ d_dtm_register(struct d_dtm *dtm, struct d_dtm_reg *reg)
 	if (!type)
 		return NULL;
 
-	rc = D_MUTEX_INIT(&type->dt_lock, NULL);
-	if (rc != -DER_SUCCESS) {
-		D_FREE(type);
-		return NULL;
+	if (reg->dr_use_lock) {
+		rc = D_MUTEX_INIT(&type->dt_lock, NULL);
+		if (rc != -DER_SUCCESS) {
+			D_FREE(type);
+			return NULL;
+		}
 	}
 
 	D_TRACE_UP(DB_ANY, type, dtm, reg->dr_name);
@@ -294,7 +312,8 @@ d_dtm_register(struct d_dtm *dtm, struct d_dtm_reg *reg)
 		 * injected fault would be ignored - failing the specific
 		 * test.
 		 */
-		D_MUTEX_DESTROY(&type->dt_lock);
+		if (type->dt_reg.dr_use_lock)
+			D_MUTEX_DESTROY(&type->dt_lock);
 		D_FREE(type);
 		return NULL;
 	}
@@ -318,7 +337,8 @@ d_dtm_acquire(struct d_dtm_type *type)
 	d_list_t	*entry;
 	bool		at_limit = false;
 
-	D_MUTEX_LOCK(&type->dt_lock);
+	if (type->dt_reg.dr_use_lock)
+		D_MUTEX_LOCK(&type->dt_lock);
 
 	type->dt_no_restock++;
 
@@ -345,7 +365,8 @@ d_dtm_acquire(struct d_dtm_type *type)
 		}
 	}
 
-	D_MUTEX_UNLOCK(&type->dt_lock);
+	if (type->dt_reg.dr_use_lock)
+		D_MUTEX_UNLOCK(&type->dt_lock);
 
 	if (ptr)
 		D_TRACE_DEBUG(DB_ANY, type, "Using %p", ptr);
@@ -368,10 +389,12 @@ d_dtm_release(struct d_dtm_type *type, void *ptr)
 	d_list_t *entry = ptr + type->dt_reg.dr_offset;
 
 	D_TRACE_DOWN(DB_ANY, ptr);
-	D_MUTEX_LOCK(&type->dt_lock);
+	if (type->dt_reg.dr_use_lock)
+		D_MUTEX_LOCK(&type->dt_lock);
 	type->dt_pending_count++;
 	d_list_add_tail(entry, &type->dt_pending_list);
-	D_MUTEX_UNLOCK(&type->dt_lock);
+	if (type->dt_reg.dr_use_lock)
+		D_MUTEX_UNLOCK(&type->dt_lock);
 }
 
 /* Re-stock an object type.
@@ -391,7 +414,8 @@ d_dtm_restock(struct d_dtm_type *type)
 	D_TRACE_DEBUG(DB_ANY, type, "Count (%d/%d/%d)", type->dt_pending_count,
 		      type->dt_free_count, type->dt_count);
 
-	D_MUTEX_LOCK(&type->dt_lock);
+	if (type->dt_reg.dr_use_lock)
+		D_MUTEX_LOCK(&type->dt_lock);
 
 	/* Update restock hwm metrics */
 	if (type->dt_no_restock > type->dt_no_restock_hwm)
@@ -404,5 +428,6 @@ d_dtm_restock(struct d_dtm_type *type)
 	if (!type->dt_reg.dr_max_desc)
 		create_many(type);
 
-	D_MUTEX_UNLOCK(&type->dt_lock);
+	if (type->dt_reg.dr_use_lock)
+		D_MUTEX_UNLOCK(&type->dt_lock);
 }

@@ -336,9 +336,22 @@ vos_tls_fini(const struct dss_thread_local_storage *dtls,
 	if (tls->vtl_cont_hhash)
 		d_uhash_destroy(tls->vtl_cont_hhash);
 
+	d_dtm_destroy(&tls->vtl_dtm);
 	umem_fini_txd(&tls->vtl_txd);
 	vos_ts_table_free(&tls->vtl_ts_table);
 	D_FREE(tls);
+}
+
+static int
+vos_dtm_init(struct d_dtm *dtm)
+{
+	int	rc;
+
+	rc = d_dtm_init(dtm, NULL);
+	if (rc)
+		D_ERROR("Failed to allocate vos dtm: "DF_RC"\n", DP_RC(rc));
+
+	return rc;
 }
 
 static void *
@@ -387,7 +400,17 @@ vos_tls_init(const struct dss_thread_local_storage *dtls,
 		goto failed;
 	}
 
+	rc = vos_dtm_init(&tls->vtl_dtm);
+	if (rc) {
+		vos_ts_table_free(&tls->vtl_ts_table);
+		umem_fini_txd(&tls->vtl_txd);
+		D_FREE(tls);
+	}
+
+	tls->vtl_ioc_type = vos_ioc_register(&tls->vtl_dtm);
+
 	return tls;
+
 failed:
 	vos_tls_fini(dtls, key, tls);
 	return NULL;
