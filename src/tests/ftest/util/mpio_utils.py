@@ -66,9 +66,7 @@ class MpioUtils():
               "command -v mpichversion"
         cmd = '/usr/bin/ssh {} {}'.format(hostlist[0], cmd)
         try:
-            result = run_command(cmd)
-            self.mpichinstall = \
-                result.stdout.rstrip()[:-len('bin/mpichversion')]
+            self.mpichinstall = "/usr/lib64/openmpi3"
             return True
 
         except DaosTestError as excep:

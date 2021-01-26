@@ -4117,6 +4117,38 @@ io_fetch_retry_another_replica(void **state)
 	ioreq_fini(&req);
 }
 
+static void
+delet_container_during_aggregation(void **state)
+{
+	test_arg_t	*arg = *state;
+	daos_obj_id_t	 oid;
+	daos_pool_info_t pinfo;
+	int i;
+
+	oid = dts_oid_gen(dts_obj_class, 0, arg->myrank);
+	print_message("Insert(e=0)/lookup(e=0)/verify simple kv record\n");
+	pool_storage_info(state, &pinfo);
+
+	/* Fail the first try */
+	if (arg->myrank == 0)
+		daos_debug_set_params(arg->group, 0, DMG_KEY_FAIL_LOC,
+				 DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ONCE,
+				 0, NULL);
+
+	daos_fail_loc_set(DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ALWAYS);
+	//daos_fail_loc_set(DAOS_OBJ_TRY_SPECIAL_SHARD | DAOS_FAIL_ONCE);
+	daos_fail_value_set(0);
+
+	for(i=0; i<=10; i++){
+	io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
+			   "io_simple_nvme_array dkey",
+			   "io_simple_nvme_array akey");
+	pool_storage_info(state, &pinfo);
+	}
+	sleep(30);
+	pool_storage_info(state, &pinfo);
+}
+
 static const struct CMUnitTest io_tests[] = {
 	{ "IO1: simple update/fetch/verify",
 	  io_simple, async_disable, test_case_teardown},
@@ -4203,6 +4235,9 @@ static const struct CMUnitTest io_tests[] = {
 	  test_case_teardown},
 	{ "IO42: IO fetch from an alternative node after first try failed",
 	  io_fetch_retry_another_replica, async_disable,
+	  test_case_teardown},
+	{ "IO43: Delete Container during Aggregation",
+	  delet_container_during_aggregation, async_disable,
 	  test_case_teardown},
 };
 

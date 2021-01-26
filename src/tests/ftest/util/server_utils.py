@@ -44,7 +44,7 @@ class DaosServerCommand(YamlCommand):
     FORMAT_PATTERN = "(SCM format required)(?!;)"
     REFORMAT_PATTERN = "Metadata format required"
 
-    def __init__(self, path="", yaml_cfg=None, timeout=30):
+    def __init__(self, path="", yaml_cfg=None, timeout=120):
         """Create a daos_server command object.
 
         Args:
@@ -280,7 +280,7 @@ class DaosServerCommand(YamlCommand):
                 #                       confirmation
                 self.pci_whitelist = FormattedParameter("--pci-whitelist={}")
                 self.hugepages = FormattedParameter("--hugepages={}")
-                self.target_user = FormattedParameter("--target-user={}")
+                self.target_user = FormattedParameter("--target-user=samirrav")
                 self.nvme_only = FormattedParameter("--nvme-only", False)
                 self.scm_only = FormattedParameter("--scm-only", False)
                 self.reset = FormattedParameter("--reset", False)
@@ -379,9 +379,6 @@ class DaosServerManager(SubprocessManager):
             if self.manager.job.using_nvme or self.manager.job.using_dcpm:
                 self.log.info("Preparing storage in <format> mode")
                 self.prepare_storage("root")
-                if hasattr(self.manager, "mca"):
-                    self.manager.mca.update(
-                        {"plm_rsh_args": "-l root"}, "orterun.mca", True)
 
     def clean_files(self, verbose=True):
         """Clean up the daos server files.
@@ -468,7 +465,7 @@ class DaosServerManager(SubprocessManager):
             cmd.sub_command_class.sub_command_class.hugepages.value = hugepages
 
         self.log.info("Preparing DAOS server storage: %s", str(cmd))
-        result = pcmd(self._hosts, str(cmd), timeout=40)
+        result = pcmd(self._hosts, str(cmd), timeout=120)
         if len(result) > 1 or 0 not in result:
             dev_type = "nvme"
             if using_dcpm and using_nvme:
@@ -570,7 +567,7 @@ class DaosServerManager(SubprocessManager):
             "<SERVER> Formatting hosts: <%s>", self.dmg.hostlist)
         # Temporarily increasing timeout to avoid CI errors until DAOS-5764 can
         # be further investigated.
-        self.dmg.storage_format(timeout=40)
+        self.dmg.storage_format(timeout=120)
 
         # Wait for all the daos_io_servers to start
         self.detect_io_server_start()

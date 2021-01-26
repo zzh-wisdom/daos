@@ -145,7 +145,7 @@ class _env_module(): # pylint: disable=invalid-name
         """Invoke the mpi loader"""
         if not self._module_load(mpi):
             print("No %s found\n" % mpi)
-            return False
+            #return False
         exe_path = find_executable('mpirun')
         if not exe_path:
             print("No mpirun found in path. Could not configure %s\n" % mpi)

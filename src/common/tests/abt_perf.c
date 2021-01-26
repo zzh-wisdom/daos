@@ -101,6 +101,7 @@ abt_ult_create_rate(void)
 		if (abt_exiting) {
 			if (abt_ults == 0) { /* complete */
 				ABT_mutex_unlock(abt_lock);
+				printf("SAMIR abt_exiting\n");
 				break;
 			}
 
@@ -133,6 +134,7 @@ abt_ult_create_rate(void)
 			       abt_cntr, nsec);
 			prt = now;
 		}
+
 		ABT_thread_yield();
 	}
 	printf("ABT creation rate = %lu/sec.\n", abt_cntr / opt_secs);

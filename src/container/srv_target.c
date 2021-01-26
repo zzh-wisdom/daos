@@ -355,11 +355,16 @@ cont_child_aggregate(struct ds_cont_child *cont, uint64_t *msecs)
 			DP_CONT(cont->sc_pool->spc_uuid, cont->sc_uuid),
 			tgt_id, epoch_range.epr_lo, epoch_range.epr_hi);
 
+		D_DEBUG(DB_EPC, "SAMIR in snapshots_nr\n");
+
 		rc = cont_aggregate_epr(cont, &epoch_range, 0ULL, false);
 		if (rc)
 			D_GOTO(free, rc);
 		epoch_range.epr_lo = epoch_range.epr_hi + 1;
 	}
+
+	if (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED_FAIL))
+		printf("----- SAMIR Aggregation Yield is ON\n");
 
 	D_ASSERT(epoch_range.epr_lo <= epoch_max);
 	if (epoch_range.epr_lo == epoch_max)

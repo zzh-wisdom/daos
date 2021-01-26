@@ -200,7 +200,7 @@ class DmgCommand(DmgCommandBase):
         self.log.info("storage_scan data: %s", str(data))
         return data
 
-    def storage_format(self, reformat=False, timeout=30, verbose=False):
+    def storage_format(self, reformat=False, timeout=120, verbose=False):
         """Get the result of the dmg storage format command.
 
         Args:

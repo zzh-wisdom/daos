@@ -558,7 +558,7 @@ class SubProcessCommand(CommandWithSubCommand):
     Example commands: daos_agent, daos_server
     """
 
-    def __init__(self, namespace, command, path="", timeout=10):
+    def __init__(self, namespace, command, path="", timeout=120):
         """Create a SubProcessCommand object.
 
         Args:
@@ -611,6 +611,7 @@ class SubProcessCommand(CommandWithSubCommand):
 
         """
         complete = True
+        self.pattern_timeout.value = 120
         self.log.info(
             "Checking status of the %s command in %s with a %s second timeout",
             self._command, sub_process, self.pattern_timeout.value)
