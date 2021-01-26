@@ -283,9 +283,12 @@ type EventLogger struct {
 
 // OnEvent implements the events.Handler interface.
 func (el *EventLogger) OnEvent(_ context.Context, evt *events.RASEvent) {
+	el.log.Debugf("OnEvent: logging %s, forwarded: %v", evt.ID, evt.IsForwarded())
 	if evt.IsForwarded() {
 		return // event has already been logged at source
 	}
+	el.log.Debugf("OnEvent: printing")
+	el.log.Info("OnEvent: printing info")
 	el.log.Info(evt.PrintRAS())
 }
 
