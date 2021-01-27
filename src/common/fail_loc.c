@@ -52,7 +52,7 @@ daos_fail_check(uint64_t fail_loc)
 	     (fail_loc & DAOS_FAIL_MASK_LOC)) &&
 	     !d_fault_inject_is_enabled())
 		return 0;
-	printf("----SAMIR daos_fail_check \n");
+
 	/**
 	 * TODO reset fail_loc to save some cycles once the
 	 * current fail_loc finish the job.
@@ -92,8 +92,6 @@ daos_fail_loc_set(uint64_t fail_loc)
 	struct d_fault_attr_t	attr_in = { 0 };
 	bool			attr_set = false;
 
-	printf("*** fSAMIR daos_fail_loc_set\n");
-
 	/* If fail_loc is 0, let's assume it will reset unit test fail loc */
 	if (fail_loc == 0)
 		attr_in.fa_id = DAOS_FAIL_UNIT_TEST_GROUP;
@@ -121,7 +119,7 @@ daos_fail_loc_set(uint64_t fail_loc)
 		d_fault_attr_set(attr_in.fa_id, attr_in);
 
 	daos_fail_loc = fail_loc;
-	printf("*** fail_loc="DF_X64"\n", daos_fail_loc);
+
 	D_DEBUG(DB_ANY, "*** fail_loc="DF_X64"\n", daos_fail_loc);
 }
 
