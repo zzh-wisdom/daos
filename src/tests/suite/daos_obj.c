@@ -4132,21 +4132,21 @@ delet_container_during_aggregation(void **state)
 	/* Fail the first try */
 	if (arg->myrank == 0)
 		daos_debug_set_params(arg->group, 0, DMG_KEY_FAIL_LOC,
-				 DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ONCE,
+				 DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ALWAYS,
 				 0, NULL);
 
-	daos_fail_loc_set(DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ALWAYS);
-	//daos_fail_loc_set(DAOS_OBJ_TRY_SPECIAL_SHARD | DAOS_FAIL_ONCE);
-	daos_fail_value_set(0);
-
-	for(i=0; i<=10; i++){
+	for(i=0; i<=50; i++){
 	io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
 			   "io_simple_nvme_array dkey",
 			   "io_simple_nvme_array akey");
-	pool_storage_info(state, &pinfo);
 	}
-	sleep(30);
-	pool_storage_info(state, &pinfo);
+	daos_fail_loc_set(DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ALWAYS);
+	//daos_fail_value_set(0);
+
+	for(i=0; i<=45; i++){
+		pool_storage_info(state, &pinfo);
+		sleep(1);
+	}
 }
 
 static const struct CMUnitTest io_tests[] = {

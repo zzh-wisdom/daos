@@ -363,9 +363,6 @@ cont_child_aggregate(struct ds_cont_child *cont, uint64_t *msecs)
 		epoch_range.epr_lo = epoch_range.epr_hi + 1;
 	}
 
-	if (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED_FAIL))
-		printf("----- SAMIR Aggregation Yield is ON\n");
-
 	D_ASSERT(epoch_range.epr_lo <= epoch_max);
 	if (epoch_range.epr_lo == epoch_max)
 		goto out;
