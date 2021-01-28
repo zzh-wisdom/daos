@@ -2018,6 +2018,7 @@ vos_aggregate(daos_handle_t coh, daos_epoch_range_t *epr,
 	if (rc)
 		return rc;
 
+	printf("----- SAMIR >>>>> vos_aggregate\n");
 	if (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED_FAIL))
 		printf("----- SAMIR Aggregation Yield is ON\n");
 
