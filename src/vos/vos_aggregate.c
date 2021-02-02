@@ -1773,6 +1773,10 @@ vos_agg_ev(daos_handle_t ih, vos_iter_entry_t *entry,
 		DP_EXT(&phy_ext), entry->ie_epoch, entry->ie_minor_epc,
 		entry->ie_vis_flags);
 
+	while (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED)) {
+		ABT_thread_yield();
+	}
+
 	rc = set_window_size(mw, entry->ie_rsize);
 	if (rc)
 		goto out;
@@ -2017,10 +2021,6 @@ vos_aggregate(daos_handle_t coh, daos_epoch_range_t *epr,
 	rc = aggregate_enter(cont, false, epr);
 	if (rc)
 		return rc;
-
-	printf("----- SAMIR >>>>> vos_aggregate\n");
-	if (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED_FAIL))
-		printf("----- SAMIR Aggregation Yield is ON\n");
 
 	/* Set iteration parameters */
 	iter_param.ip_hdl = coh;

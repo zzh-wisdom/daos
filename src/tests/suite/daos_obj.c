@@ -4124,17 +4124,17 @@ delet_container_during_aggregation(void **state)
 	daos_obj_id_t	 oid;
 	daos_pool_info_t pinfo;
 	int i;
+	time_t rawtime;
+	struct tm * timeinfo;
 
 	oid = dts_oid_gen(dts_obj_class, 0, arg->myrank);
 	print_message("Insert(e=0)/lookup(e=0)/verify simple kv record\n");
 	pool_storage_info(state, &pinfo);
 
-	/* Fail the first try */
-	if (arg->myrank == 0)
-		daos_debug_set_params(arg->group, 0, DMG_KEY_FAIL_LOC,
-				 DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ONCE,
-				 0, NULL);
-	daos_fail_loc_set(DAOS_CONT_AGG_YIED_FAIL | DAOS_FAIL_ONCE);
+
+	/* All ranks should wait before rebuild */
+	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC,
+		DAOS_CONT_AGG_YIED | DAOS_FAIL_ALWAYS, 0, NULL);
 
 	for(i=0; i<=50; i++){
 	io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
@@ -4142,9 +4142,23 @@ delet_container_during_aggregation(void **state)
 			   "io_simple_nvme_array akey");
 	}
 
-	for(i=0; i<=45; i++){
+	for(i=0; i<=20; i++){
+		time ( &rawtime );
+		timeinfo = localtime ( &rawtime );
+		printf ( "Current local time and date: %s", asctime (timeinfo) );
 		pool_storage_info(state, &pinfo);
-		sleep(1);
+		sleep(2);
+	}
+
+	/* Continue Aggregation */
+	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC, 0, 0, NULL);
+
+	for(i=0; i<=15; i++){
+		time ( &rawtime );
+		timeinfo = localtime ( &rawtime );
+		printf ( "After Current local time and date: %s", asctime (timeinfo) );
+		pool_storage_info(state, &pinfo);
+		sleep(2);
 	}
 }
 
