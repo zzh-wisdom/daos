@@ -27,6 +27,7 @@
  */
 #define D_LOGFAC	DD_FAC(tests)
 #include "daos_test.h"
+#include "daos_iotest.h"
 
 #define TEST_MAX_ATTR_LEN	(128)
 
@@ -2083,6 +2084,72 @@ co_open_fail_destroy(void **state)
 	print_message("success\n");
 }
 
+static void
+delet_container_during_aggregation(void **state)
+{
+	test_arg_t	*arg = *state;
+	daos_obj_id_t	 oid;
+	struct ioreq	 req;
+	daos_pool_info_t pinfo;
+	daos_size_t	size = 2 * 1024; /* record size */
+	const char	dkey[] = "dkey";
+	const char	akey[] = "akey";
+	char		*ow_buf;
+	int		rx_nr;
+	int		i;
+	int		rc;
+
+	/*
+	 * Allocate and set write buffer with data
+	 */
+	D_ALLOC(ow_buf, size);
+	assert_non_null(ow_buf);
+	dts_buf_render(ow_buf, size);
+
+	/*
+	 * Prepare records
+	 */
+	oid = dts_oid_gen(OC_RP_2G1, 0, arg->myrank);
+	ioreq_init(&req, arg->coh, oid, DAOS_IOD_ARRAY, arg);
+
+	print_message("Initial Pool Query\n");
+	pool_storage_info(state, &pinfo);
+
+	/* Aggregation will be Hold */
+	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC,
+		DAOS_CONT_AGG_YIED | DAOS_FAIL_ALWAYS, 0, NULL);
+
+	/* Write Data with 2K size which writes to SCM */
+	print_message("Insert Initial record\n");
+	rx_nr = size / OW_IOD_SIZE;
+	for(i=0; i<=50; i++){
+		insert_single_with_rxnr(dkey, akey, /*idx*/0, ow_buf,
+			OW_IOD_SIZE, rx_nr, DAOS_TX_NONE, &req);
+		dts_buf_render(ow_buf, size);
+	}
+	/*for(i=0; i<=50; i++){
+		io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
+			"io_simple_scm_array dkey",
+			"io_simple_scm_array akey");
+	}*/
+
+	/* Run Pool query every 2 seconds for Total 30 seconds */
+	for(i=0; i<=20; i++){
+		pool_storage_info(state, &pinfo);
+		sleep(2);
+	}
+
+	/* Aggregation will continue */
+	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC, 0, 0, NULL);
+
+	/* Destroy the container while Aggregation is running */
+	rc = test_teardown_cont(arg);
+	assert_int_equal(rc, 0);
+
+	/* Run Pool query at the end */
+	pool_storage_info(state, &pinfo);
+}
+
 static int
 co_setup_sync(void **state)
 {
@@ -2153,15 +2220,26 @@ static const struct CMUnitTest co_tests[] = {
 	  co_attribute_access, NULL, test_case_teardown},
 	{ "CONT23: container open failed/destroy",
 	  co_open_fail_destroy, NULL, test_case_teardown},
+	{ "CONT24: Delete Container during Aggregation",
+	  delet_container_during_aggregation, async_disable,
+	  test_case_teardown},
 };
 
 int
-run_daos_cont_test(int rank, int size)
+run_daos_cont_test(int rank, int size, int *sub_tests, int sub_tests_size)
 {
 	int rc = 0;
 
-	rc = cmocka_run_group_tests_name("DAOS container tests",
-					 co_tests, setup, test_teardown);
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (sub_tests_size == 0) {
+		sub_tests_size = ARRAY_SIZE(co_tests);
+		sub_tests = NULL;
+	}
+
+	rc = run_daos_sub_tests("DAOS container tests", co_tests,
+				ARRAY_SIZE(co_tests), sub_tests, sub_tests_size,
+				setup, test_teardown);
+
 	MPI_Barrier(MPI_COMM_WORLD);
 	return rc;
 }

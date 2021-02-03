@@ -133,6 +133,8 @@ lookup_recxs(const char *dkey, const char *akey, daos_size_t iod_size,
 void
 close_reopen_coh_oh(test_arg_t *arg, struct ioreq *req, daos_obj_id_t oid);
 
+int pool_storage_info(void **state, daos_pool_info_t *pinfo);
+
 int
 obj_setup(void **state);
 

@@ -578,7 +578,7 @@ lookup_empty_single(const char *dkey, const char *akey, uint64_t idx,
 /**
  * get the Pool storage info.
  */
-static int
+int
 pool_storage_info(void **state, daos_pool_info_t *pinfo)
 {
 	test_arg_t *arg = *state;
@@ -4117,46 +4117,6 @@ io_fetch_retry_another_replica(void **state)
 	ioreq_fini(&req);
 }
 
-static void
-delet_container_during_aggregation(void **state)
-{
-	test_arg_t	*arg = *state;
-	daos_obj_id_t	 oid;
-	daos_pool_info_t pinfo;
-	int i, rc;
-
-	oid = dts_oid_gen(dts_obj_class, 0, arg->myrank);
-	print_message("Initial Pool Query\n");
-	pool_storage_info(state, &pinfo);
-
-	/* Aggregation will be Hold */
-	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC,
-		DAOS_CONT_AGG_YIED | DAOS_FAIL_ALWAYS, 0, NULL);
-
-	/* Write Data with 2K size which writes to SCM */
-	for(i=0; i<=50; i++){
-		io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
-			"io_simple_scm_array dkey",
-			"io_simple_scm_array akey");
-	}
-
-	/* Run Pool query every 2 seconds for Total 30 seconds */
-	for(i=0; i<=20; i++){
-		pool_storage_info(state, &pinfo);
-		sleep(2);
-	}
-
-	/* Aggregation will continue */
-	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC, 0, 0, NULL);
-
-	/* Destroy the container while Aggregation is running */
-	rc = test_teardown_cont(arg);
-	assert_int_equal(rc, 0);
-
-	/* Run Pool query at the end */
-	pool_storage_info(state, &pinfo);
-}
-
 static const struct CMUnitTest io_tests[] = {
 	{ "IO1: simple update/fetch/verify",
 	  io_simple, async_disable, test_case_teardown},
@@ -4243,9 +4203,6 @@ static const struct CMUnitTest io_tests[] = {
 	  test_case_teardown},
 	{ "IO42: IO fetch from an alternative node after first try failed",
 	  io_fetch_retry_another_replica, async_disable,
-	  test_case_teardown},
-	{ "IO43: Delete Container during Aggregation",
-	  delet_container_during_aggregation, async_disable,
 	  test_case_teardown},
 };
 
