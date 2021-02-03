@@ -1766,16 +1766,17 @@ vos_agg_ev(daos_handle_t ih, vos_iter_entry_t *entry,
 		return rc;
 	}
 
+	/* Aggregation Yield for testing purpose */
+	while (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED)) {
+		ABT_thread_yield();
+	}
+
 	/* Aggregation */
 	D_DEBUG(DB_EPC, "oid:"DF_UOID", lgc_ext:"DF_EXT", "
 		"phy_ext:"DF_EXT", epoch:"DF_U64".%d, flags: %x\n",
 		DP_UOID(agg_param->ap_oid), DP_EXT(&lgc_ext),
 		DP_EXT(&phy_ext), entry->ie_epoch, entry->ie_minor_epc,
 		entry->ie_vis_flags);
-
-	while (DAOS_FAIL_CHECK(DAOS_CONT_AGG_YIED)) {
-		ABT_thread_yield();
-	}
 
 	rc = set_window_size(mw, entry->ie_rsize);
 	if (rc)

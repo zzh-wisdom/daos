@@ -4123,43 +4123,38 @@ delet_container_during_aggregation(void **state)
 	test_arg_t	*arg = *state;
 	daos_obj_id_t	 oid;
 	daos_pool_info_t pinfo;
-	int i;
-	time_t rawtime;
-	struct tm * timeinfo;
+	int i, rc;
 
 	oid = dts_oid_gen(dts_obj_class, 0, arg->myrank);
-	print_message("Insert(e=0)/lookup(e=0)/verify simple kv record\n");
+	print_message("Initial Pool Query\n");
 	pool_storage_info(state, &pinfo);
 
-
-	/* All ranks should wait before rebuild */
+	/* Aggregation will be Hold */
 	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC,
 		DAOS_CONT_AGG_YIED | DAOS_FAIL_ALWAYS, 0, NULL);
 
+	/* Write Data with 2K size which writes to SCM */
 	for(i=0; i<=50; i++){
-	io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
-			   "io_simple_nvme_array dkey",
-			   "io_simple_nvme_array akey");
+		io_simple_internal(state, oid, IO_SIZE_SCM * 32, DAOS_IOD_ARRAY,
+			"io_simple_scm_array dkey",
+			"io_simple_scm_array akey");
 	}
 
+	/* Run Pool query every 2 seconds for Total 30 seconds */
 	for(i=0; i<=20; i++){
-		time ( &rawtime );
-		timeinfo = localtime ( &rawtime );
-		printf ( "Current local time and date: %s", asctime (timeinfo) );
 		pool_storage_info(state, &pinfo);
 		sleep(2);
 	}
 
-	/* Continue Aggregation */
+	/* Aggregation will continue */
 	daos_debug_set_params(arg->group, -1, DMG_KEY_FAIL_LOC, 0, 0, NULL);
 
-	for(i=0; i<=15; i++){
-		time ( &rawtime );
-		timeinfo = localtime ( &rawtime );
-		printf ( "After Current local time and date: %s", asctime (timeinfo) );
-		pool_storage_info(state, &pinfo);
-		sleep(2);
-	}
+	/* Destroy the container while Aggregation is running */
+	rc = test_teardown_cont(arg);
+	assert_int_equal(rc, 0);
+
+	/* Run Pool query at the end */
+	pool_storage_info(state, &pinfo);
 }
 
 static const struct CMUnitTest io_tests[] = {
