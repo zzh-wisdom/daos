@@ -37,7 +37,7 @@
 #include <daos/common.h>
 #include <daos/tests_lib.h>
 #include <daos_srv/vos.h>
-#include <daos/dts.h>
+#include "dts_obj_ctl.h"
 
 /**
  * An example for integer key evtree .
@@ -253,14 +253,14 @@ ctl_cmd_run(char opc, char *args)
 		strncpy(cred->tc_dbuf, dkey, DTS_KEY_LEN);
 		cred->tc_dbuf[DTS_KEY_LEN - 1] = '\0';
 		d_iov_set(&cred->tc_dkey, cred->tc_dbuf,
-			     strlen(cred->tc_dbuf) + 1);
+			 strlen(cred->tc_dbuf) + 1);
 	}
 
 	if ((ctl_abits & CTL_ARG_AKEY) && akey != NULL) {
 		strncpy(cred->tc_abuf, akey, DTS_KEY_LEN);
 		cred->tc_abuf[DTS_KEY_LEN - 1] = '\0';
 		d_iov_set(&cred->tc_iod.iod_name, cred->tc_abuf,
-			     strlen(cred->tc_abuf) + 1);
+			 strlen(cred->tc_abuf) + 1);
 
 		cred->tc_iod.iod_type	= DAOS_IOD_SINGLE;
 		cred->tc_iod.iod_size	= -1; /* overwrite by CTL_ARG_VAL */
@@ -274,11 +274,11 @@ ctl_cmd_run(char opc, char *args)
 		strncpy(cred->tc_vbuf, val, ctl_ctx.tsc_cred_vsize);
 		cred->tc_vbuf[ctl_ctx.tsc_cred_vsize - 1] = '\0';
 		d_iov_set(&cred->tc_val, cred->tc_vbuf,
-			     strlen(cred->tc_vbuf) + 1);
+			 strlen(cred->tc_vbuf) + 1);
 	} else {
 		memset(cred->tc_vbuf, 0, ctl_ctx.tsc_cred_vsize);
 		d_iov_set(&cred->tc_val, cred->tc_vbuf,
-			     ctl_ctx.tsc_cred_vsize);
+			 ctl_ctx.tsc_cred_vsize);
 	}
 	cred->tc_sgl.sg_nr = 1;
 	cred->tc_sgl.sg_iovs = &cred->tc_val;
