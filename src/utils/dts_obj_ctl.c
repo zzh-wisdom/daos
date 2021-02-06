@@ -20,11 +20,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <mpi.h>
 #include <daos/common.h>
 #include <daos/tests_lib.h>
 #include <daos_srv/vos.h>
-#include <daos_test.h>
+//#include <daos_test.h>
+#include <daos.h>
 #include "dts_obj_ctl.h"
 
 /* path to dmg config file */
@@ -183,63 +183,21 @@ pool_init(struct dts_context *tsc)
 	if (tsc->tsc_scm_size == 0)
 		tsc->tsc_scm_size = (1ULL << 30);
 
-	if (tsc->tsc_pmem_file) { /* VOS mode */
-		char	*pmem_file = tsc->tsc_pmem_file;
-		int	 fd;
+	d_rank_list_t	*svc = &tsc->tsc_svc;
 
-		if (!daos_file_is_dax(pmem_file)) {
-			rc = open(pmem_file, O_CREAT | O_TRUNC | O_RDWR, 0666);
-			if (rc < 0)
-				goto out;
+	if (tsc->tsc_dmg_conf)
+		dmg_config_file = tsc->tsc_dmg_conf;
 
-			fd = rc;
-			rc = fallocate(fd, 0, 0, tsc->tsc_scm_size);
-			if (rc)
-				goto out;
-		}
+	rc = dmg_pool_create(dmg_config_file, geteuid(), getegid(),
+			     NULL, NULL,
+			     tsc->tsc_scm_size, tsc->tsc_nvme_size,
+			     NULL, svc, tsc->tsc_pool_uuid);
 
-		/* Use pool size as blob size for this moment. */
-		rc = vos_pool_create(pmem_file, tsc->tsc_pool_uuid, 0,
-				     tsc->tsc_nvme_size);
-		if (rc)
-			goto out;
+	rc = daos_pool_connect(tsc->tsc_pool_uuid, NULL,
+			       DAOS_PC_EX, &poh, NULL, NULL);
 
-		rc = vos_pool_open(pmem_file, tsc->tsc_pool_uuid, false, &poh);
-		if (rc)
-			goto out;
-
-	} else if (tsc->tsc_mpi_rank == 0) { /* DAOS mode and rank zero */
-		d_rank_list_t	*svc = &tsc->tsc_svc;
-
-		if (tsc->tsc_dmg_conf)
-			dmg_config_file = tsc->tsc_dmg_conf;
-
-		rc = dmg_pool_create(dmg_config_file, geteuid(), getegid(),
-				     NULL, NULL,
-				     tsc->tsc_scm_size, tsc->tsc_nvme_size,
-				     NULL, svc, tsc->tsc_pool_uuid);
-		if (rc)
-			goto bcast;
-
-		rc = daos_pool_connect(tsc->tsc_pool_uuid, NULL,
-				       DAOS_PC_EX, &poh, NULL, NULL);
-		if (rc)
-			goto bcast;
-	}
 	tsc->tsc_poh = poh;
- bcast:
-	if (tsc->tsc_mpi_size <= 1)
-		goto out; /* don't need to share handle */
 
-	if (!tsc->tsc_pmem_file)
-		MPI_Bcast(&rc, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	if (rc)
-		goto out; /* open failed */
-
-	if (!tsc->tsc_pmem_file)
-		handle_share(&tsc->tsc_poh, HANDLE_POOL, tsc->tsc_mpi_rank,
-			     tsc->tsc_poh, 0);
- out:
 	return rc;
 }
 
@@ -248,23 +206,15 @@ pool_fini(struct dts_context *tsc)
 {
 	int	rc;
 
-	if (tsc->tsc_pmem_file) { /* VOS mode */
-		vos_pool_close(tsc->tsc_poh);
-		rc = vos_pool_destroy(tsc->tsc_pmem_file, tsc->tsc_pool_uuid);
-		D_ASSERTF(rc == 0 || rc == -DER_NONEXIST, "rc="DF_RC"\n",
-			DP_RC(rc));
+	daos_pool_disconnect(tsc->tsc_poh, NULL);
 
-	} else { /* DAOS mode */
-		daos_pool_disconnect(tsc->tsc_poh, NULL);
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (tsc->tsc_mpi_rank == 0) {
-			rc = dmg_pool_destroy(dmg_config_file,
-					      tsc->tsc_pool_uuid, NULL, true);
-			D_ASSERTF(rc == 0 || rc == -DER_NONEXIST ||
-				  rc == -DER_TIMEDOUT, "rc="DF_RC"\n",
-				  DP_RC(rc));
-		}
-	}
+	rc = dmg_pool_destroy(dmg_config_file,
+			      tsc->tsc_pool_uuid, NULL, true);
+	D_ASSERTF(rc == 0 || rc == -DER_NONEXIST ||
+		  rc == -DER_TIMEDOUT, "rc="DF_RC"\n",
+		  DP_RC(rc));
+
+
 }
 
 static int
@@ -273,49 +223,24 @@ cont_init(struct dts_context *tsc)
 	daos_handle_t	coh = DAOS_HDL_INVAL;
 	int		rc;
 
-	if (tsc->tsc_pmem_file) { /* VOS mode */
-		rc = vos_cont_create(tsc->tsc_poh, tsc->tsc_cont_uuid);
-		if (rc)
-			goto out;
+	rc = daos_cont_create(tsc->tsc_poh, tsc->tsc_cont_uuid, NULL,
+			      NULL);
+	if (rc != 0)
+		goto out;
 
-		rc = vos_cont_open(tsc->tsc_poh, tsc->tsc_cont_uuid, &coh);
-		if (rc)
-			goto out;
+	rc = daos_cont_open(tsc->tsc_poh, tsc->tsc_cont_uuid,
+			    DAOS_COO_RW, &coh, NULL, NULL);
 
-	} else if (tsc->tsc_mpi_rank == 0) { /* DAOS mode and rank zero */
-		rc = daos_cont_create(tsc->tsc_poh, tsc->tsc_cont_uuid, NULL,
-				      NULL);
-		if (rc != 0)
-			goto bcast;
-
-		rc = daos_cont_open(tsc->tsc_poh, tsc->tsc_cont_uuid,
-				    DAOS_COO_RW, &coh, NULL, NULL);
-		if (rc != 0)
-			goto bcast;
-	}
 	tsc->tsc_coh = coh;
- bcast:
-	if (tsc->tsc_mpi_size <= 1)
-		goto out; /* don't need to share handle */
-
-	MPI_Bcast(&rc, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	if (rc)
-		goto out; /* open failed */
-
-	if (!tsc->tsc_pmem_file)
-		handle_share(&tsc->tsc_coh, HANDLE_CO, tsc->tsc_mpi_rank,
-			     tsc->tsc_poh, 0);
- out:
+ 
+out:
 	return rc;
 }
 
 static void
 cont_fini(struct dts_context *tsc)
 {
-	if (tsc->tsc_pmem_file) /* VOS mode */
-		vos_cont_close(tsc->tsc_coh);
-	else /* DAOS mode */
-		daos_cont_close(tsc->tsc_coh, NULL);
+	daos_cont_close(tsc->tsc_coh, NULL);
 
 	/* NB: no container destroy at here, it will be destroyed by pool
 	 * destroy later. This is because container destroy could be too
@@ -335,10 +260,8 @@ dts_ctx_init(struct dts_context *tsc)
 		goto out;
 	tsc->tsc_init = DTS_INIT_DEBUG;
 
-	if (tsc->tsc_pmem_file) /* VOS mode */
-		rc = vos_self_init("/mnt/daos");
-	else
-		rc = daos_init();
+	rc = daos_init();
+
 	if (rc)
 		goto out;
 	tsc->tsc_init = DTS_INIT_MODULE;
@@ -382,9 +305,6 @@ dts_ctx_fini(struct dts_context *tsc)
 		pool_fini(tsc);
 		/* fall through */
 	case DTS_INIT_MODULE:	/* finalize module */
-		if (tsc->tsc_pmem_file)
-			vos_self_fini();
-		else
 			daos_fini();
 		/* fall through */
 	case DTS_INIT_DEBUG:	/* finalize debug system */

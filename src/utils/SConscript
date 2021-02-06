@@ -32,6 +32,9 @@ def scons():
     denv.AppendUnique(RPATH_FULL=['$PREFIX/lib64/daos_srv'])
     prereqs.require(denv, 'argobots', 'protobufc')
 
+    #dts_lib_single = daos_build.library(denv, 'libdts_single', ['dts_obj_ctl.c'], LIBS=libs)
+    #denv.Install('$PREFIX/lib64/', dts_lib_single)
+
     daos_extra_files = denv.Object(['daos_hdlr.c', 'daos_autotest.c'])
     daos_obj_ctl = denv.Object(['daos_obj_ctl.c', 'dts_obj_ctl.c'])
 

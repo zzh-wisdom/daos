@@ -7,6 +7,10 @@
 #ifndef __DTS_OBJ_CTL_H__
 #define __DTS_OBJ_CTL_H__
 
+#if D_HAS_WARNING(4, "-Wframe-larger-than=")
+	#pragma GCC diagnostic ignored "-Wframe-larger-than="
+#endif
+
 /**
  * Initialize I/O test context:
  * - create and connect to pool based on the input pool uuid and size
