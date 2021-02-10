@@ -314,16 +314,8 @@ next_fail:
 		/* The selected spare target is up and ready */
 		l_shard->po_target = spare_tgt->ta_comp.co_id;
 		l_shard->po_fseq = f_shard->fs_fseq;
-
-		/*
-		 * Mark the shard as 'rebuilding' so that read will
-		 * skip this shard.
-		 */
-		if (f_shard->fs_status == PO_COMP_ST_DOWN ||
-		    f_shard->fs_status == PO_COMP_ST_DRAIN) {
-			l_shard->po_rebuilding = 1;
-			f_shard->fs_tgt_id = spare_tgt->ta_comp.co_id;
-		}
+		l_shard->po_rebuilding = 1;
+		f_shard->fs_tgt_id = spare_tgt->ta_comp.co_id;
 	} else {
 		l_shard->po_shard = -1;
 		l_shard->po_target = -1;
