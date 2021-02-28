@@ -32,8 +32,12 @@ dRPC 是通过 Unix 域套接字构建的通信通道，用于进程间通信。
 - daos_agent 和 libdaos 用于应用程序（客户端）验证
 - daos_server（控制平面）和daos_engine（数据平面）守护进程之间类似于 gRPC，RPC 通过protocol buffers进行序列化。
 
+**dRPC的详细介绍，参考[这里](/src/control/drpc/README.cn.md)。**
+
 ## 3. CART
 
 [CART(Collective and RPC Transport)](https://github.com/daos-stack/cart) 是一个用户空间函数扩展库（也是一种RPC），为 **DAOS 数据平面**提供低延迟高带宽通信。**它支持 RDMA 功能和可扩展的集体操作**。CART 建在 [Mercury](https://github.com/mercury-hpc/mercury) 和 [libfabric](https://ofiwg.github.io/libfabric/) 之上。
 
 - CART 库用于 `libdaos` 和 `daos_engine` 实例之间的所有通信。（主要是数据访问）
+
+**CART的详细介绍，参考[这里](/src/cart/README.cn.md)。**
