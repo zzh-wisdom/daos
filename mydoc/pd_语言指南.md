@@ -21,6 +21,10 @@
 - [扩展 Extensions](#扩展-extensions)
   - [嵌套扩展](#嵌套扩展)
   - [选择扩展编号](#选择扩展编号)
+- [Oneof](#oneof)
+  - [使用Oneof](#使用oneof)
+  - [Oneof功能](#oneof功能)
+  - [向后兼容性问题](#向后兼容性问题)
 - [8. 更多阅读](#8-更多阅读)
 
 原文：<https://developers.google.com/protocol-buffers/docs/overview>
@@ -448,8 +452,90 @@ extend Foo {
 
 ### 选择扩展编号
 
-确保两个用户不使用**相同的字段号**将扩展添加到同一消息类型是非常重要的–如果意外将扩展解释为错误的类型，则可能导致数据损坏。您可能需要考虑为项目定义扩展编号约定，以防止发生这种情况。
+确保两个用户不使用**相同的字段号**将扩展添加到同一消息类型是非常重要的–如果意外将扩展解释为错误的类型，则可能导致数据损坏。您可能需要考虑为项目定义**扩展编号约定**，以防止发生这种情况。
 
+如果您的编号约定可能涉及具有非常大字段编号的扩展，则可以使用 `max` 关键字指定您的扩展范围可达到最大可能的字段编号：
+
+```go
+message Foo {
+  extensions 1000 to max;
+}
+```
+
+`max` is 229 - 1, or 536,870,911.
+
+与通常选择字段编号一样，您的编号约定还需要避免字段编号 19000 到 19999（`FieldDescriptor::kFirstReservedNumber` 到 `FieldDescriptor::kLastReservedNumber`），因为它们保留给协议缓冲区实现的。您可以定义包含此范围的扩展范围，但**协议编译器不允许您使用这些数字定义实际扩展**。
+
+## Oneof
+
+如果您有一个带有许多可选字段的消息，并且**同时**只能设置最多一个字段，则可以通过使用`oneof`功能执行此行为并节约内存。
+
+`Oneof`字段就像可选字段，但排除oneof共享内存中的所有字段，并且最多只能同时设置一个字段。设置oneof的任何成员将自动清除所有其他成员。您可以根据您选择的语言，使用`case()`或`WhichOneof()`方法检查oneof中的哪一个值设置了（如果有）。
+
+### 使用Oneof
+
+要在`.proto`中定义oneof，请使用`oneof`关键字，然后使用您的oneof名称，在这种情况下，为test_oneof：
+
+```go
+message SampleMessage {
+  oneof test_oneof {
+     string name = 4;
+     SubMessage sub_message = 9;
+  }
+}
+```
+
+然后，将你的oneof字段添加到`oneof`定义中。您可以添加任何类型的字段，但不能使用`required`、`optional`或`repeated`关键字。如果您需要向oneof添加重复字段，则可以使用包含重复字段的消息了类型。
+
+在生成的代码中，oneof字段具有与常规`optional`方法相同的获取器和设置器。您还可以获得一种特殊方法，用于检查其中一个值（如果有）是否设置。您可以在相关的 [API 参考](https://developers.google.com/protocol-buffers/docs/reference/overview)中为您选择的语言找到更多有关 oneof 的 API。
+
+### Oneof功能
+
+- 设置一个oneof字段将自动清除其中的所有其他成员。因此，如果您设置了几个oneof字段，则只有最后一个设置的字段才具有值。
+
+    ```go
+    SampleMessage message;
+    message.set_name("name");
+    CHECK(message.has_name());
+    message.mutable_sub_message();   // Will clear name field.
+    CHECK(!message.has_name());
+    ```
+
+- 如果解析器在流上遇到同一个oneof的多个成员，则只有**最后一个**成员在解析消息中使用。
+- oneof不支持扩展。
+- oneof不能为重复的。
+- 反射API适用于oneof字段。
+- 如果将一个oneof字段设置为默认值（例如将一个int32的oneof字段设置为 0），则该字段的"case"将被设置，并且该值将在流上序列化。
+- 如果您正在使用C++，**请确保您的代码不会导致内存崩溃**。以下示例代码将崩溃，因为sub_message已通过调用set_name()方法将其删除。
+
+    ```go
+    SampleMessage message;
+    SubMessage* sub_message = message.mutable_sub_message();
+    message.set_name("name");      // Will delete sub_message
+    sub_message->set_...            // Crashes here
+    ```
+
+- 同样，在C++中，如果您将两条消息的oneofs `Swap()`，则每条消息最终都会得到另一条消息的oneof值：在下面的示例中，`msg1` 将有一个`sub_message`，`msg2` 将有一个`name`。
+
+    ```go
+    SampleMessage msg1;
+    msg1.set_name("name");
+    SampleMessage msg2;
+    msg2.mutable_sub_message();
+    msg1.swap(&msg2);
+    CHECK(msg1.has_sub_message());
+    CHECK(msg2.has_name());
+    ```
+
+### 向后兼容性问题 
+
+添加或删除oneof字段时要小心。如果检查oneof的值返回`None/NOT_SET`，则可能意味着oneof未设置或已设置为不同版本的字段。没有办法区分，因为没有办法知道流上的未知字段是否为oneof的成员。
+
+#### 标记重复使用问题
+
+- **将可选字段移入或移出oneof**：在消息序列化和解析后，您可能会丢失一些信息（某些字段将被清除）。**但是，您可以安全地将（外部的）单个字段移动到新的oneof中，如果已知只有一个字段曾经设置过，则可以移动多个字段。**
+- **删除一个oneof字段然后将其添加回来**：这可能会在消息序列化和解析后清除您当前设置的字段之一。
+- **拆分或合并oneof**：这与移动常规`optional`字段有相似的问题。
 
 ## 8. 更多阅读
 
