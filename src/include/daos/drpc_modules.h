@@ -23,7 +23,7 @@ enum drpc_module {
 	DRPC_MODULE_SRV			= 3,	/* daos_server */
 	DRPC_MODULE_SEC			= 4,	/* daos_server security */
 
-	NUM_DRPC_MODULES			/* Must be last */
+	NUM_DRPC_MODULES			/* Must be last 代表模块的个数*/
 };
 
 enum drpc_sec_agent_method {

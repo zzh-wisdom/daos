@@ -15,6 +15,7 @@ import (
 
 // Module is an interface that a type must implement to provide the
 // functionality needed by the ModuleService to process dRPC requests.
+// 模块结构，向ModuleService注册时需要的实现的接口
 type Module interface {
 	HandleCall(*Session, Method, []byte) ([]byte, error)
 	ID() ModuleID
@@ -22,6 +23,7 @@ type Module interface {
 
 // ModuleService is the collection of Modules used by
 // DomainSocketServer to be used to process messages.
+// 模块的集合，使用map只是方便查找管理，并没有实现动态注册的功能
 type ModuleService struct {
 	log     logging.Logger
 	modules map[ModuleID]Module
@@ -39,6 +41,7 @@ func NewModuleService(log logging.Logger) *ModuleService {
 // RegisterModule will take in a type that implements the Module interface
 // and ensure that no other module is already registered with that module
 // identifier.
+// 需要确保其他模块没有使用相同的模块标志符即ID，不能注册重复ID的模块
 func (r *ModuleService) RegisterModule(mod Module) {
 	_, found := r.GetModule(mod.ID())
 	if found {
@@ -58,11 +61,12 @@ func (r *ModuleService) GetModule(id ModuleID) (Module, bool) {
 
 // marshalResponse is an internal function that will take the necessary
 // and create a dRPC Response protobuf bytes to send back
+// 将调用返回结果连同序列号、响应的状态一起编码成字节串
 //
 //	Arguments:
 //	sequence: the sequence number associated with the call processed
 //	status: the drpc.Status of the response
-//	body: the bytes associated with the response data.
+//	body: the bytes associated with the response data. 可以理解为调用的返回结果
 //
 //	Returns:
 //	(bytes representing response protobuf, marshalling error if one exits)
@@ -92,6 +96,7 @@ func marshalResponse(sequence int64, status Status, body []byte) ([]byte, error)
 // ProcessMessage is the main entry point into the ModuleService. It accepts a
 // marshaled drpc.Call instance, processes it, calls the handler in the
 // appropriate Module, and marshals the result into the body of a drpc.Response.
+// 该函数是ModuleService的主要访问点，负责解码请求的消息流、调用相应的模块方法、编码结果到response中，最后返回response的序列化字节串
 func (r *ModuleService) ProcessMessage(session *Session, msgBytes []byte) ([]byte, error) {
 	msg := &Call{}
 

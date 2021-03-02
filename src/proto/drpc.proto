@@ -10,6 +10,7 @@ option go_package = "github.com/daos-stack/daos/src/control/drpc";
 
 /**
  * Call describes a function call to be executed over the dRPC channel.
+ * Call描述了通过dRPC通道执行的函数调用。
  */
 message Call {
 	int32 module = 1; // ID of the module to process the call.
@@ -23,13 +24,13 @@ message Call {
  */
 enum Status {
 	SUCCESS = 0; // The method executed and provided a response payload, if needed. Otherwise, the method simply succeeded.
-	SUBMITTED = 1; // The method has been queued for asynchronous execution.
-	FAILURE = 2; // The method has failed and did not provide a response payload.
-	UNKNOWN_MODULE = 3; // The requested module does not exist.
-	UNKNOWN_METHOD = 4; // The requested method does not exist.
-	FAILED_UNMARSHAL_CALL = 5; // Could not unmarshal the incoming call.
-	FAILED_UNMARSHAL_PAYLOAD = 6; // Could not unmarshal the method-specific payload of the incoming call.
-	FAILED_MARSHAL = 7; // Generated a response payload, but couldn't marshal it into the response.
+	SUBMITTED = 1; // The method has been queued for asynchronous execution. 该方法已排队等待异步执行。
+	FAILURE = 2; // The method has failed and did not provide a response payload. 该方法已失败，并且未提供响应有效负载。
+	UNKNOWN_MODULE = 3; // The requested module does not exist. 请求的模块不存在。
+	UNKNOWN_METHOD = 4; // The requested method does not exist. 请求的方法不存在。
+	FAILED_UNMARSHAL_CALL = 5; // Could not unmarshal the incoming call. 无法解组传入的Call。
+	FAILED_UNMARSHAL_PAYLOAD = 6; // Could not unmarshal the method-specific payload of the incoming call.无法解组传入Call的特定于方法的有效负载，即body部分。
+	FAILED_MARSHAL = 7; // Generated a response payload, but couldn't marshal it into the response. 生成了响应有效负载，但无法将其编组到响应中。
 }
 
 /**

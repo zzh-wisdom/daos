@@ -87,7 +87,7 @@ func NewFailureWithMessage(message string) Failure {
 
 // ErrorToStatus translates an error to a dRPC Status.
 // In practice it checks to see if it was a dRPC Failure error, and uses the Status if so.
-// Otherwise it is assumed to be a generic failure.
+// Otherwise it is assumed to be a generic failure. 通用故障。
 func ErrorToStatus(err error) Status {
 	if err == nil {
 		return Status_SUCCESS
@@ -95,5 +95,5 @@ func ErrorToStatus(err error) Status {
 	if failure, ok := err.(Failure); ok {
 		return failure.GetStatus()
 	}
-	return Status_FAILURE
+	return Status_FAILURE // 表示通用故障
 }

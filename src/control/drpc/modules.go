@@ -5,6 +5,7 @@
 //
 
 // This file imports all of the DAOS dRPC module/method IDs.
+// 实现所有的模块：四个模块及它们的方法
 
 package drpc
 
@@ -16,13 +17,14 @@ import (
 )
 
 // #cgo CFLAGS: -I${SRCDIR}/../../include
-// #include <daos/drpc_modules.h>
+// #include <daos/drpc_modules.h>  // @todo read
 import "C"
 
-const moduleMethodOffset = 100
+const moduleMethodOffset = 100 // 意味着每个模块最多只能有100个方法，每个模块的方法是全局唯一的，而不仅仅是在模块内部
 
 type ModuleID int32
 
+// 获取对应模块ID的模块名
 func (id ModuleID) String() string {
 	if name, ok := map[ModuleID]string{
 		ModuleSecurityAgent: "Agent Security",
@@ -36,6 +38,8 @@ func (id ModuleID) String() string {
 	return fmt.Sprintf("unknown module id: %d", id)
 }
 
+// 实际返回的是对应模块下的方法编号，一个整数类型，只是这个整数类型实现了Method接口
+// 该函数的功能只是将methodID整数转换为对应模块下的方法编号类型
 func (id ModuleID) GetMethod(methodID int32) (Method, error) {
 	if m, ok := map[ModuleID]Method{
 		ModuleSecurityAgent: securityAgentMethod(methodID),
@@ -59,12 +63,16 @@ func (id ModuleID) ID() int32 {
 
 const (
 	// ModuleSecurityAgent is the dRPC module for security tasks in DAOS agent
+	// ModuleSecurityAgent是dRPC模块，用于 DAOS代理中的安全任务
 	ModuleSecurityAgent ModuleID = C.DRPC_MODULE_SEC_AGENT
 	// ModuleMgmt is the dRPC module for management service tasks
+	// ModuleMgmt是用于管理服务任务的dRPC模块
 	ModuleMgmt ModuleID = C.DRPC_MODULE_MGMT
 	// ModuleSrv is the dRPC module for tasks relating to server setup
+	// ModuleSrv是dRPC模块，用于执行与 服务器设置 有关的任务
 	ModuleSrv ModuleID = C.DRPC_MODULE_SRV
 	// ModuleSecurity is the dRPC module for security tasks in DAOS server
+	// ModuleSecurity是dRPC模块，用于 DAOS服务器中的安全任务
 	ModuleSecurity ModuleID = C.DRPC_MODULE_SEC
 )
 
@@ -85,6 +93,7 @@ func (m securityAgentMethod) ID() int32 {
 	return int32(m)
 }
 
+// 目前该模块只有一个方法
 func (m securityAgentMethod) String() string {
 	if s, ok := map[securityAgentMethod]string{
 		MethodRequestCredentials: "request agent credentials",
@@ -96,6 +105,7 @@ func (m securityAgentMethod) String() string {
 }
 
 // IsValid sanity checks the Method ID is within expected bounds.
+// 判断方法ID是否在预期的范围内
 func (m securityAgentMethod) IsValid() bool {
 	startMethodID := int32(m.Module()) * moduleMethodOffset
 
@@ -311,6 +321,7 @@ const (
 
 // Marshal is a utility function that can be used by dRPC method handlers to
 // marshal their method-specific response to be passed back to the ModuleService.
+// 用于编码方法返回结果的功能函数
 func Marshal(message proto.Message) ([]byte, error) {
 	msgBytes, err := proto.Marshal(message)
 	if err != nil {
