@@ -43,8 +43,8 @@ DAOS系统由**系统名称**标识，并且由连接到同一fabric的一组DAO
 
 延伸阅读：
 
-- [DAOS 控制平面 (daos_server)](./1.1.1.控制平面.md)
-- [DAOS 数据平面 (daos_engine)](./1.1.2.数据平面.md)
+- [DAOS 控制平面 (daos_server)](./control/README.cn.md)
+- [DAOS 数据平面 (daos_engine)](./engine/README.cn.md)
 
 ### 1.2. Client APIs, Tools and I/O Middleware
 
