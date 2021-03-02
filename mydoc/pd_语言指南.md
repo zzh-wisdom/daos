@@ -25,6 +25,16 @@
   - [使用Oneof](#使用oneof)
   - [Oneof功能](#oneof功能)
   - [向后兼容性问题](#向后兼容性问题)
+    - [标记重复使用问题](#标记重复使用问题)
+- [Maps](#maps)
+  - [map的功能](#map的功能)
+  - [向后兼容性](#向后兼容性)
+- [Packages](#packages)
+  - [包和名称解释Resolution](#包和名称解释resolution)
+- [定义服务](#定义服务)
+- [Options](#options)
+  - [自定义选项](#自定义选项)
+- [生成您的类](#生成您的类)
 - [8. 更多阅读](#8-更多阅读)
 
 原文：<https://developers.google.com/protocol-buffers/docs/overview>
@@ -536,6 +546,265 @@ message SampleMessage {
 - **将可选字段移入或移出oneof**：在消息序列化和解析后，您可能会丢失一些信息（某些字段将被清除）。**但是，您可以安全地将（外部的）单个字段移动到新的oneof中，如果已知只有一个字段曾经设置过，则可以移动多个字段。**
 - **删除一个oneof字段然后将其添加回来**：这可能会在消息序列化和解析后清除您当前设置的字段之一。
 - **拆分或合并oneof**：这与移动常规`optional`字段有相似的问题。
+
+## [Maps](https://developers.google.com/protocol-buffers/docs/overview#maps)
+
+如果要创建关联映射作为数据定义的一部分，则协议缓冲区提供了一种方便的快捷方式语法：
+
+```go
+map<key_type, value_type> map_field = N;
+```
+
+其中`key_type`可以是任何整数或字符串类型（因此，可以是除了**浮点类型**和**字节**之外的任何[标量类型](https://developers.google.com/protocol-buffers/docs/overview#scalar)）。请注意，**枚举**不是有效的`key_type`。`value_type`可以是除了另一个映射map以外的任何类型。
+
+因此，例如，如果您想创建一个项目projects的映射，其中每个Project消息都与一个字符串键key相关联，则可以这样定义它：
+
+```go
+map<string, Project> projects = 3;
+```
+
+生成的map API当前可用于所有proto2支持的语言。您可以在相关[API参考](https://developers.google.com/protocol-buffers/docs/reference/overview)中找到有关所选语言的map API的更多信息。
+
+### map的功能
+
+- map不支持扩展
+- map不能是repeated, optional, or required。
+- map值的迭代顺序和编码顺序是未定义的。因此，您不能依赖map条目按特定顺序排列。
+- 为.proto生成文本格式时，map按key进行排序。数字key按照数值进行排序。
+- 当从流解释时，或合并时，**如果有重复的map键，则使用最后一个看到的key**。从文本格式解析map时，如果存在重复key，解析可能会失败。
+
+### 向后兼容性
+
+不支持map的语言可以用repeated的消息字段代替。
+
+（更多信息参考原文档）
+
+## Packages
+
+您可以在`.proto`文件中添加可选的 `package` 指定器，以防止协议消息类型之间的命名冲突。
+
+```go
+package foo.bar;
+message Open { ... }
+```
+
+然后，您可以在定义消息类型字段时使用包指定器：
+
+```go
+message Foo {
+  ...
+  required foo.bar.Open open = 1;
+  ...
+}
+```
+
+包指定器影响生成代码的方式取决于您选择的语言：
+
+- 在C++生成的类被包裹在C++名称空间中。例如，`Open`将在名称空间 `foo::bar`。
+- 在 Java 中，该包用作 Java 包，除非您在.proto 文件中明确提供`option java_package`。
+- 在 Python 中，包指令被忽略，因为 Python 模块是根据其在文件系统中的位置组织的。
+- 在 Go 中，包指令被忽略，生成的 `.pb.go` 文件位于以相应的go_proto_library规则命名的包中。
+
+请注意，即使包指令不直接影响生成的代码，例如在 Python 中，仍强烈建议为 .proto 文件指定包，否则可能导致描述符中的命名冲突，并使proto文件不适合其他语言。
+
+### 包和名称解释Resolution
+
+在协议缓冲语言中键入名称解析，如C++：首先搜索最内层的范围，然后搜索次内层等等，每个包都被认为是其父包的"内在"。前导的'.'（例如，`.foo.bar.Baz`）是指从最外层的范围开始。
+
+协议缓冲器编译器通过解析导入的.proto文件来解决所有类型名称。每个语言的代码生成器知道如何在该语言中指定每个类型，即使它具有不同的范围规则。
+
+## 定义服务
+
+如果您想使用带有 RPC（Remote Procedure Call）系统的消息类型，您可以在 .proto 文件中定义 RPC 服务接口，协议缓冲器编译器将生成所选语言中的服务接口代码和存根stub。因此，例如，如果您想定义一个使用`SearchRequest`并返回`SearchResponse`的 RPC 服务，则可以在您的`.proto` 文件中将其定义如下：
+
+```go
+service SearchService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+```
+
+默认情况下，协议编译器将生成一个名为`SearchService`的抽象接口和相应的`stub`实现。存根stub将所有调用转发到 `RpcChannel`，而 `RpcChannel` 又是一个抽象接口，您必须根据自己的 RPC 系统来定义自己的RpcChannel。例如，您可以实现 `RpcChannel`，该通道将消息序列化并通过 HTTP 发送到服务器。换句话说，生成的存根为基于协议缓冲区的 RPC 调用提供了一个类型安全的接口，而不会将您锁定到任何特定的 RPC 实现中。因此，在C++中，您最终可能会编写这样的代码：
+
+```go
+using google::protobuf;
+
+protobuf::RpcChannel* channel;
+protobuf::RpcController* controller;
+SearchService* service;
+SearchRequest request;
+SearchResponse response;
+
+void DoSearch() {
+  // You provide classes MyRpcChannel and MyRpcController, which implement
+  // the abstract interfaces protobuf::RpcChannel and protobuf::RpcController.
+  channel = new MyRpcChannel("somehost.example.com:1234");
+  controller = new MyRpcController;
+
+  // The protocol compiler generates the SearchService class based on the
+  // definition given above.
+  service = new SearchService::Stub(channel);
+
+  // Set up the request.
+  request.set_query("protocol buffers");
+
+  // Execute the RPC.
+  service->Search(controller, request, response, protobuf::NewCallback(&Done));
+}
+
+void Done() {
+  delete service;
+  delete channel;
+  delete controller;
+}
+```
+
+所有服务类都实现了`Service`接口，它提供了一种在编译时不知道方法名称或输入和输出类型的情况下调用特定方法的途径。在服务器方，这可用于实现可以注册服务的 RPC 服务器。
+
+```go
+using google::protobuf;
+
+class ExampleSearchService : public SearchService {
+ public:
+  void Search(protobuf::RpcController* controller,
+              const SearchRequest* request,
+              SearchResponse* response,
+              protobuf::Closure* done) {
+    if (request->query() == "google") {
+      response->add_result()->set_url("http://www.google.com");
+    } else if (request->query() == "protocol buffers") {
+      response->add_result()->set_url("http://protobuf.googlecode.com");
+    }
+    done->Run();
+  }
+};
+
+int main() {
+  // You provide class MyRpcServer.  It does not have to implement any
+  // particular interface; this is just an example.
+  MyRpcServer server;
+
+  protobuf::Service* service = new ExampleSearchService;
+  server.ExportOnPort(1234, service);
+  server.Run();
+
+  delete service;
+  return 0;
+}
+```
+
+如果您不想插入自己现有的 RPC 系统，您现在可以使用 [gRPC](https://github.com/grpc/grpc-common)：在 Google 开发的语言和平台中立的开源 RPC 系统。gRPC 在协议缓冲器方面效果特别好，可让您使用特殊的协议缓冲器编译器插件直接从 `.proto` 文件中生成相关的 RPC 代码。但是，由于使用 proto2 和 proto3 生成的客户端和服务器之间存在潜在的兼容性问题，我们建议您使用 proto3 来定义 gRPC 服务。您可以在 [proto3 语言指南](https://developers.google.com/protocol-buffers/docs/proto3)中了解更多有关 proto3 语法的知识。如果您确实想将 proto2 与 gRPC 一起使用，您需要使用版本 3.0.0 或更高的协议缓冲器编译器和库。
+
+除了 gRPC 之外，还有一些正在进行的第三方项目，用于开发用于协议缓冲区的 RPC 实现。有关我们了解的项目链接列表，请参阅[第三方附加组件 wiki 页面](https://github.com/protocolbuffers/protobuf/blob/master/docs/third_party.md)。
+
+## Options
+
+有些选项是文件级选项，这意味着它们应写在顶层范围，而不是任何消息、列举或服务定义内。有些选项是消息级选项，这意味着它们应该写在消息定义中。有些选项是字段级选项，这意味着它们应写在字段定义内。选项也可以写在列举类型、列举值、oneof字段、服务类型和服务方法上；但是，目前不存在任何用于这些方面的有用选项。
+
+### 自定义选项
+
+协议缓冲区甚至允许您定义和使用您自己的选项。请注意，这是大多数人不需要的高级功能。由于选项由 `google/protobuf/descriptor.proto` 中定义的消息定义（如`FileOptions`或`FieldOptions`），定义您自己的选项只是[扩展](https://developers.google.com/protocol-buffers/docs/overview#extensions)这些消息的问题。例如：
+
+```go
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MessageOptions {
+  optional string my_option = 51234;
+}
+
+message MyMessage {
+  option (my_option) = "Hello world!";
+}
+```
+
+在这里，我们通过扩展`MessageOptions`定义了一个新的消息级别选项。然后，当我们使用该选项时，选项名必须附在括号中，以表示它是扩展。我们现在可以在这样的C++中阅读my_option的值：
+
+```go
+string value = MyMessage::descriptor()->options().GetExtension(my_option);
+```
+
+自定义选项可以定义为Protocol Buffers语言中的每种类型构造。下面是一个使用各种选项的示例：
+
+```go
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FileOptions {
+  optional string my_file_option = 50000;
+}
+extend google.protobuf.MessageOptions {
+  optional int32 my_message_option = 50001;
+}
+extend google.protobuf.FieldOptions {
+  optional float my_field_option = 50002;
+}
+extend google.protobuf.OneofOptions {
+  optional int64 my_oneof_option = 50003;
+}
+extend google.protobuf.EnumOptions {
+  optional bool my_enum_option = 50004;
+}
+extend google.protobuf.EnumValueOptions {
+  optional uint32 my_enum_value_option = 50005;
+}
+extend google.protobuf.ServiceOptions {
+  optional MyEnum my_service_option = 50006;
+}
+extend google.protobuf.MethodOptions {
+  optional MyMessage my_method_option = 50007;
+}
+
+option (my_file_option) = "Hello world!";
+
+message MyMessage {
+  option (my_message_option) = 1234;
+
+  optional int32 foo = 1 [(my_field_option) = 4.5];
+  optional string bar = 2;
+  oneof qux {
+    option (my_oneof_option) = 42;
+
+    string quux = 3;
+  }
+}
+
+enum MyEnum {
+  option (my_enum_option) = true;
+
+  FOO = 1 [(my_enum_value_option) = 321];
+  BAR = 2;
+}
+
+message RequestType {}
+message ResponseType {}
+
+service MyService {
+  option (my_service_option) = FOO;
+
+  rpc MyMethod(RequestType) returns(ResponseType) {
+    // Note:  my_method_option has type MyMessage.  We can set each field
+    //   within it using a separate "option" line.
+    option (my_method_option).foo = 567;
+    option (my_method_option).bar = "Some string";
+  }
+}
+```
+
+## 生成您的类
+
+要生成Java、Python或C++代码，您需要处理 `.proto` 文件中定义的消息类型，您需要在 .proto 上运行协议缓冲器编译器 `protoc`。如果您尚未安装编译器，请下载该包并按照 README 中的说明操作。
+
+协议编译器的调用命令如下：
+
+```go
+protoc --proto_path=IMPORT_PATH --cpp_out=DST_DIR --java_out=DST_DIR --python_out=DST_DIR path/to/file.proto
+```
+
+- `IMPORT_PATH`指定解析 `import` 指令时在其中查找.proto文件的目录。
+如果省略，则使用当前目录。可以通过多次传递--proto_path选项来指定多个导入目录。将按顺序搜索它们。`-IIMPORT_PATH`可以用作`--proto_path`的缩写形式。
+- 您可以提供一个或多个输出指令：
+  - `--cpp_out`在DST_DIR中生成C++代码。有关更多信息，请参见[C++生成的代码参考](https://developers.google.com/protocol-buffers/docs/reference/cpp-generated)。
+  - `--java_out`在DST_DIR中生成Java代码。有关更多信息，请参见[Java生成的代码参考](https://developers.google.com/protocol-buffers/docs/reference/java-generated)。
+  - `--python_out`在DST_DIR中生成Python代码。详情请参见[Python生成的代码参考](https://developers.google.com/protocol-buffers/docs/reference/python-generated)。为进一步方便起见，如果DST_DIR以.zip或.jar结尾，则编译器会将输出写入具有给定名称的单个ZIP格式的存档文件。根据Java JAR规范的要求，还将为`.jar`输出提供清单文件。请注意，如果输出归档文件已经存在，它将被覆盖；编译器不够智能，无法将文件添加到现有存档中。
+- 您必须提供**一个或多个**`.proto` 文件作为输入。可以一次指定多个.proto文件。尽管这些文件是相对于当前目录命名的，但是每个文件都必须位于`IMPORT_PATH`之一中，以便编译器可以确定其规范命名。
 
 ## 8. 更多阅读
 
