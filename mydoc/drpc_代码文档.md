@@ -145,6 +145,18 @@ const (
 
 而且**这些模块不都是必须的**，程序可以根据需要加载特定的模块。
 
+## 其他
+
+[src/control/server/drpc.go](/src/control/server/drpc.go)
+
+- drpc服务器启动时的准备（设置）工作。
+- 如何重试执行rpc调用
+
+服务器启动时，需要清除之前使用的所有daos套接字：
+
+- daos_server.sock
+- daos_engine*.sock 数据平面使用的套接字有多个
+
 ## 待完成
 
 - [src/control/cmd/daos_agent/start.go](/src/control/cmd/daos_agent/start.go)

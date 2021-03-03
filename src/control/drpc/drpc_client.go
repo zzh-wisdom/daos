@@ -18,7 +18,7 @@ import (
 // Unix Domain Socket
 // DomainSocketClient是通过Unix域套接字进行通信的dRPC客户端的接口
 type DomainSocketClient interface {
-	sync.Locker
+	sync.Locker  // 外部使用时需要上锁，以互斥
 	IsConnected() bool
 	Connect() error
 	Close() error
