@@ -156,7 +156,7 @@ func NewDomainSocketServer(ctx context.Context, log logging.Logger, sock string)
 }
 
 // Session represents an individual client connection to the Domain Socket Server.
-// 对于一个客户端的连接，以及该连接需要调用的模块服务。
+// 对应一个客户端的连接，mod包含所有的服务模块
 type Session struct {
 	Conn net.Conn
 	mod  *ModuleService

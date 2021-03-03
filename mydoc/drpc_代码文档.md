@@ -145,6 +145,61 @@ const (
 
 而且**这些模块不都是必须的**，程序可以根据需要加载特定的模块。
 
+代理加载了：代理安全模块、管理模块
+控制平面加载了：服务器安全模块、管理模块、服务模块
+
+#### 代理安全模块
+
+由结构体`SecurityModule`实现，实现代码位于：[src/control/cmd/daos_agent/security_rpc.go](/src/control/cmd/daos_agent/security_rpc.go)。
+
+提供的方法服务仅有1个：
+
+- MethodRequestCredentials。请求凭证
+
+#### 管理模块
+
+由结构体`mgmtModule`实现，实现代码位于：[src/control/server/mgmt_drpc.go](/src/control/server/mgmt_drpc.go)。
+
+预定实现的功能有很多。
+
+对于control plane，该模块的实际代码实现好像并没有提供任何方法接口，如下代码所示。
+
+```go
+// HandleCall is the handler for calls to the mgmtModule
+func (mod *mgmtModule) HandleCall(session *drpc.Session, method drpc.Method, req []byte) ([]byte, error) {
+    return nil, drpc.UnknownMethodFailure()
+}
+```
+
+对于agent，该模块提供了一些方法。
+
+该模块主要功能有：
+
+- 关闭(target？)
+- 查询和设置rank
+- Pool管理，如创建、销毁、扩展、查询、权限设置等等。
+- 容器的管理
+- 其他辅助功能
+
+#### 服务模块
+
+由结构体`srvModule`实现，实现代码位于：[src/control/server/mgmt_drpc.go](/src/control/server/mgmt_drpc.go)。
+
+目前的主要功能只是获取一些状态信息。
+
+- MethodNotifyReady：通知已经准备就绪
+- MethodBIOError：报告bio错误
+- MethodGetPoolServiceRanks：获取pool服务等级
+- MethodClusterEvent：报告集群事件
+
+#### 服务器安全模块
+
+与代理安全模块使用同名的结构体`SecurityModule`来实现，但具体的实现细节不同，实现代码位于：[src/control/server/security_rpc.go](/src/control/server/security_rpc.go)
+
+提供的方法服务也仅有1个：
+
+- MethodValidateCredentials。验证凭证
+
 ## 其他
 
 [src/control/server/drpc.go](/src/control/server/drpc.go)
